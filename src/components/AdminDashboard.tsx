@@ -1307,49 +1307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </ul>
                     </div>
 
-                    <div className="border border-purple-100 bg-purple-50/70 rounded-xl p-4 text-xs text-purple-900 space-y-2">
-                      <p className="font-bold text-sm text-purple-950 flex items-center gap-1.5">
-                        <span>📱</span> Buka Aplikasi di HP / Browser Lain:
-                      </p>
-                      <p className="font-medium text-purple-900 leading-relaxed">
-                        Agar saat dibuka di HP, tablet, atau laptop lain tampilannya <strong>langsung tersambung secara otomatis</strong> tanpa perlu mengisi ulang URL Web App di perangkat baru, silakan gunakan atau bagikan tautan khusus di bawah ini ke HP Anda (lewat WA/Email):
-                      </p>
-                      <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={scriptUrl ? `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(scriptUrl)}` : 'Harap simpan URL Web App terlebih dahulu...'}
-                          className="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-xs font-mono text-purple-800 outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!scriptUrl) return;
-                            const shareLink = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(scriptUrl)}`;
-                            navigator.clipboard.writeText(shareLink);
-                            setIsShareUrlCopied(true);
-                            setTimeout(() => setIsShareUrlCopied(false), 2000);
-                          }}
-                          disabled={!scriptUrl}
-                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
-                        >
-                          {isShareUrlCopied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Tersalin!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" />
-                              <span>Salin Link HP</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-purple-600/90 font-medium">
-                        * Tautan ini secara otomatis mendeteksi dan mengonfigurasi database di HP Anda ketika pertama kali dibuka.
-                      </p>
-                    </div>
+
                   </div>
                 )}
 

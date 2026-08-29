@@ -200,7 +200,7 @@ function getDownloadUrl() {
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
 // SCRIPT_URL_MARKER_START
-export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID/exec";
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec";
 // SCRIPT_URL_MARKER_END
 
 let inMemoryAppsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
@@ -233,18 +233,9 @@ export const setStoredAppsScriptUrl = (url: string): void => {
 };
 
 export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<any[] | null> => {
-  const url = targetUrl || getStoredAppsScriptUrl();
-  if (!url || !url.startsWith('https://script.google.com/') || !url.includes('/exec') || url.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
-    return null;
-  }
-
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
+    const url = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
+    const response = await fetch(url);
     if (!response.ok) return null;
     const json = await response.json();
     
@@ -298,28 +289,22 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
 
     return parsedGuests;
   } catch (err) {
-    // Soft log network/cors issues without throwing console error
     console.warn('Google Sheets sync unavailable or offline:', err instanceof Error ? err.message : String(err));
     return null;
   }
 };
 
 export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): Promise<boolean> => {
-  const url = targetUrl || getStoredAppsScriptUrl();
-  if (!url || !url.startsWith('https://script.google.com/') || !url.includes('/exec') || url.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
-    return false;
-  }
-
   try {
-    await fetch(url, {
+    const url = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
+    const response = await fetch(url, {
       method: 'POST',
-      mode: 'no-cors',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(guest),
     });
-    return true;
+    return response.ok;
   } catch (err) {
     console.warn('Gagal mengirim data ke Google Sheets:', err instanceof Error ? err.message : String(err));
     return false;
@@ -327,26 +312,9 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
 };
 
 export const fetchAdminsFromGoogleSheets = async (targetUrl?: string): Promise<any[] | null> => {
-  const baseUrl = targetUrl || getStoredAppsScriptUrl();
-  if (!baseUrl || !baseUrl.startsWith('https://script.google.com/') || !baseUrl.includes('/exec') || baseUrl.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
-    return null;
-  }
-
   try {
-    const timestamp = Date.now();
-    const fetchUrl = baseUrl.includes('?') 
-      ? `${baseUrl}&action=getAdmins&_t=${timestamp}` 
-      : `${baseUrl}?action=getAdmins&_t=${timestamp}`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(fetchUrl, { 
-      cache: 'no-store',
-      signal: controller.signal 
-    });
-    clearTimeout(timeoutId);
-
+    const url = targetUrl ? `/api/admins?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/admins';
+    const response = await fetch(url);
     if (!response.ok) return null;
     const json = await response.json();
     if (json && json.status === 'success' && Array.isArray(json.admins)) {
@@ -361,26 +329,9 @@ export const fetchAdminsFromGoogleSheets = async (targetUrl?: string): Promise<a
 };
 
 export const fetchSettingsFromGoogleSheets = async (targetUrl?: string): Promise<Record<string, string> | null> => {
-  const baseUrl = targetUrl || getStoredAppsScriptUrl();
-  if (!baseUrl || !baseUrl.startsWith('https://script.google.com/') || !baseUrl.includes('/exec') || baseUrl.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
-    return null;
-  }
-
   try {
-    const timestamp = Date.now();
-    const fetchUrl = baseUrl.includes('?') 
-      ? `${baseUrl}&action=getSettings&_t=${timestamp}` 
-      : `${baseUrl}?action=getSettings&_t=${timestamp}`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(fetchUrl, { 
-      cache: 'no-store',
-      signal: controller.signal 
-    });
-    clearTimeout(timeoutId);
-
+    const url = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
+    const response = await fetch(url);
     if (!response.ok) return null;
     const json = await response.json();
     if (json && json.status === 'success' && json.settings) {
@@ -396,26 +347,15 @@ export const fetchSettingsFromGoogleSheets = async (targetUrl?: string): Promise
 };
 
 export const saveSettingsToGoogleSheets = async (settings: Record<string, string>, targetUrl?: string): Promise<boolean> => {
-  const baseUrl = targetUrl || getStoredAppsScriptUrl();
-  if (!baseUrl || !baseUrl.startsWith('https://script.google.com/') || !baseUrl.includes('/exec') || baseUrl.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
-    return false;
-  }
-
   try {
-    const params = new URLSearchParams({
-      action: 'saveSettings',
-      nama_sekolah: settings.nama_sekolah || '',
-      logo_url: settings.logo_url || '',
-      copyright: settings.copyright || ''
+    const url = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
     });
-
-    const saveUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}${params.toString()}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(saveUrl, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
     if (!response.ok) return false;
     const json = await response.json();
     if (json && json.status === 'success') {
