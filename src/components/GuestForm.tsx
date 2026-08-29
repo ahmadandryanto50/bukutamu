@@ -84,11 +84,17 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
   // Hitung statistik pengunjung hari ini secara dinamis
   const todayPrefix = (() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return {
+      iso: `${yyyy}-${mm}-${dd}`,
+      slash: `${dd}/${mm}/${yyyy}`
+    };
   })();
 
   const todayGuests = (guests || []).filter(
-    (g) => g.waktu && g.waktu.startsWith(todayPrefix)
+    (g) => g.waktu && (g.waktu.startsWith(todayPrefix.iso) || g.waktu.startsWith(todayPrefix.slash))
   );
 
   const totalToday = todayGuests.length;

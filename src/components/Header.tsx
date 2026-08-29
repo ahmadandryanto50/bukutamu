@@ -11,6 +11,7 @@ interface HeaderProps {
   onToggleTab: () => void;
   isLoggedIn: boolean;
   isSyncing?: boolean;
+  settings?: AppSettings;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,10 +21,13 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTab,
   isLoggedIn,
   isSyncing = false,
+  settings: propSettings,
 }) => {
   const [time, setTime] = useState<Date>(new Date());
   const [hasScriptUrl, setHasScriptUrl] = useState<boolean>(!!getStoredAppsScriptUrl());
-  const [settings, setSettings] = useState<AppSettings>(getStoredSettings());
+  const [localSettings, setLocalSettings] = useState<AppSettings>(getStoredSettings());
+
+  const settings = propSettings || localSettings;
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -31,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
       setHasScriptUrl(!!e.detail);
     };
     const handleSettingsEvent = (e: any) => {
-      if (e.detail) setSettings(e.detail);
+      if (e.detail) setLocalSettings(e.detail);
     };
     
     window.addEventListener('apps_script_url_changed', handleUrlEvent);

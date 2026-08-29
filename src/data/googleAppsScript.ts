@@ -269,7 +269,7 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
           tujuan: row[6] || '-',
           keperluan: row[7] || '-',
           saran: row[8] || '',
-          noHp: row[9] || '',
+          nohp: row[9] || '',
         });
       } else if (typeof row === 'object' && row !== null) {
         parsedGuests.push({
@@ -282,7 +282,7 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
           tujuan: row.tujuan || '-',
           keperluan: row.keperluan || '-',
           saran: row.saran || '',
-          noHp: row.nohp || row.noHp || '',
+          nohp: row.nohp || row.noHp || '',
         });
       }
     });
