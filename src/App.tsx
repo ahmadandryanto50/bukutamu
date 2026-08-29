@@ -5,7 +5,7 @@ import { Header } from './components/Header';
 import { GuestForm } from './components/GuestForm';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets, fetchAdminsFromGoogleSheets } from './data/googleAppsScript';
+import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets, fetchAdminsFromGoogleSheets, DEFAULT_APPS_SCRIPT_URL } from './data/googleAppsScript';
 import { getStoredSettings, AppSettings } from './data/settings';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -67,7 +67,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Muat URL database permanen dari server terlebih dahulu
+    // Muat URL database permanen dari server atau gunakan default fallback
     const initializeDatabaseUrl = async () => {
       try {
         let serverUrl = '';
@@ -78,44 +78,41 @@ export default function App() {
             serverUrl = data?.url || '';
           }
         } catch (e) {
-          // Ignore network errors on Vercel for this endpoint
+          // Ignore network errors on static hosting (Vercel/GitHub Pages)
         }
         
         const savedLocal = localStorage.getItem('smpn11palu_apps_script_url') || '';
         
-        // Define default fallback URL to recognize it
-        const defaultFallbackUrl = 'https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec';
-        
         let finalUrl = serverUrl;
 
-        // If server returns empty or default, BUT client has a custom URL, prioritize client's custom URL
-        if ((!serverUrl || serverUrl === defaultFallbackUrl) && savedLocal && savedLocal !== defaultFallbackUrl && savedLocal.startsWith('https://script.google.com/')) {
-            finalUrl = savedLocal;
-            // Push this valid local URL back to server to restore it
+        // Jika localStorage memiliki URL custom yang valid, utamakan URL custom tersebut
+        if (savedLocal && savedLocal.startsWith('https://script.google.com/')) {
+          finalUrl = savedLocal;
+          if (serverUrl !== savedLocal) {
             fetch('/api/save-url', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ url: finalUrl })
             }).catch(() => {});
-        } else if (serverUrl === '' && !savedLocal) {
-            finalUrl = ''; // Clear explicitly
+          }
         }
 
-        if (finalUrl) {
-          setStoredAppsScriptUrl(finalUrl);
-          syncGuestsWithGoogleSheets(finalUrl);
-          fetchSettingsFromGoogleSheets(finalUrl);
-          fetchAdminsFromGoogleSheets(finalUrl);
-        } else {
-          setStoredAppsScriptUrl('');
-          syncGuestsWithGoogleSheets('');
-          fetchSettingsFromGoogleSheets('');
+        // Jika tidak ada URL di server maupun local, gunakan DEFAULT_APPS_SCRIPT_URL
+        if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) {
+          finalUrl = DEFAULT_APPS_SCRIPT_URL;
         }
+
+        setStoredAppsScriptUrl(finalUrl);
+        syncGuestsWithGoogleSheets(finalUrl);
+        fetchSettingsFromGoogleSheets(finalUrl);
+        fetchAdminsFromGoogleSheets(finalUrl);
       } catch (err) {
         console.warn('Gagal memuat URL database dari server:', err);
-        syncGuestsWithGoogleSheets();
-        fetchSettingsFromGoogleSheets();
-        fetchAdminsFromGoogleSheets();
+        const fallbackUrl = DEFAULT_APPS_SCRIPT_URL;
+        setStoredAppsScriptUrl(fallbackUrl);
+        syncGuestsWithGoogleSheets(fallbackUrl);
+        fetchSettingsFromGoogleSheets(fallbackUrl);
+        fetchAdminsFromGoogleSheets(fallbackUrl);
       }
     };
     

@@ -274,9 +274,9 @@ export const getStoredAppsScriptUrl = (): string => {
     }
 
     const saved = localStorage.getItem('smpn11palu_apps_script_url');
-    if (saved && saved.trim() !== '' && !saved.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) return saved.trim();
+    if (saved && saved.trim() !== '' && saved.startsWith('https://script.google.com/')) return saved.trim();
   }
-  return inMemoryAppsScriptUrl.trim();
+  return (inMemoryAppsScriptUrl && inMemoryAppsScriptUrl.trim() !== '') ? inMemoryAppsScriptUrl.trim() : DEFAULT_APPS_SCRIPT_URL;
 };
 
 export const setStoredAppsScriptUrl = (url: string): void => {
