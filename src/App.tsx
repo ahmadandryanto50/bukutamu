@@ -45,7 +45,7 @@ export default function App() {
 
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
-      if (remoteGuests && remoteGuests.length > 0) {
+      if (remoteGuests !== null && Array.isArray(remoteGuests)) {
         setGuests(remoteGuests);
         localStorage.setItem('smpn11palu_guests', JSON.stringify(remoteGuests));
         setSyncStatus('success');
@@ -144,14 +144,8 @@ export default function App() {
     setGuests((prev) => prev.filter((g) => g.id !== id));
   };
 
-  const handleRefreshGuests = () => {
-    syncGuestsWithGoogleSheets();
-    try {
-      const saved = localStorage.getItem('smpn11palu_guests');
-      if (saved) setGuests(JSON.parse(saved));
-    } catch (err) {
-      console.error('Error refreshing data:', err);
-    }
+  const handleRefreshGuests = async () => {
+    await syncGuestsWithGoogleSheets();
   };
 
   return (

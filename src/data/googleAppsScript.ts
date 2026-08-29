@@ -234,8 +234,12 @@ export const setStoredAppsScriptUrl = (url: string): void => {
 
 export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<any[] | null> => {
   try {
-    const url = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
-    const response = await fetch(url);
+    const timestamp = Date.now();
+    const url = targetUrl 
+      ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}&_t=${timestamp}` 
+      : `/api/guests?_t=${timestamp}`;
+    
+    const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) return null;
     const json = await response.json();
     
