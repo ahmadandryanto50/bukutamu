@@ -1,0 +1,6 @@
+{
+  "name": "Buku Tamu SMPN 11 Palu",
+  "description": "Aplikasi Buku Tamu Digital SMP Negeri 11 Palu untuk mencatat kunjungan tamu dan mengelola rekapitulasi data.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

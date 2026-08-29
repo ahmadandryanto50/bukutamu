@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased transition-colors duration-300;
+  /* Add subtle background pattern for professional look */
+  background-image: radial-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+html.dark body {
+  @apply bg-slate-950 text-slate-50;
+  background-image: radial-gradient(rgba(51, 65, 85, 0.2) 1px, transparent 1px);
+}
+
+/* Custom modern scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  @apply bg-slate-700;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-600;
+}
+
+/* Base focus styles for form elements */
+input:focus, select:focus, textarea:focus {
+  @apply outline-none ring-2 ring-indigo-500/50 border-indigo-500;
+}
