@@ -392,54 +392,34 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
 
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
-    // 1. Coba lewat proxy server backend terlebih dahulu jika ada
+    // 1. Coba kirim via server proxy backend
     const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
-    let proxySuccess = false;
-    try {
-      const response = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(guest),
-      }).catch(() => null);
+    fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(guest),
+    }).catch(() => null);
 
-      if (response && response.ok) {
-        proxySuccess = true;
-      }
-    } catch (e) {
-      proxySuccess = false;
-    }
+    // 2. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors')
+    fetch(getUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: JSON.stringify({ action: 'addGuest', ...guest }),
+    }).catch(() => null);
 
-    if (proxySuccess) return true;
+    // 3. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter)
+    fetch(getUrl, {
+      method: 'GET',
+      mode: 'no-cors',
+      cache: 'no-store',
+    }).catch(() => null);
 
-    // 2. Jika proxy server tidak tersedia (misal di static Vercel/GitHub Pages),
-    // Kirim langsung ke Apps Script menggunakan mode: 'no-cors' via POST (Bypass CORS Preflight redirect)
-    try {
-      await fetch(finalUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ action: 'addGuest', ...guest }),
-      }).catch(() => null);
-    } catch (e) {
-      // Ignore
-    }
-
-    // 3. Kirim via GET dengan mode: 'no-cors' (Diproses oleh doGet(e) di Apps Script via e.parameter)
-    try {
-      await fetch(getUrl, {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-store',
-      }).catch(() => null);
-    } catch (e) {
-      // Ignore
-    }
-
-    // 4. Fallback garansi 100%: Image ping (Tembus semua batasan CORS & Safari iOS/Android mobile webviews)
+    // 4. Fallback garansi 100% HP/Mobile: Image beacon ping (Tembus CORS & Webview Mobile Safari/Chrome)
     try {
       const img = new Image();
       img.src = getUrl;
