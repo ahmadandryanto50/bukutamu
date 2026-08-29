@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GuestEntry, ThemeMode, ActiveTab } from './types';
-import { INITIAL_GUESTS } from './data/initialGuests';
 import { Header } from './components/Header';
 import { GuestForm } from './components/GuestForm';
 import { AdminLogin } from './components/AdminLogin';
@@ -24,14 +23,20 @@ export default function App() {
     return localStorage.getItem('smpn11palu_admin_logged') === 'true';
   });
 
+  // Menyimpan tamu lokal yang baru saja dibuat di sesi ini dalam 15 detik terakhir
+  const recentLocalEntriesRef = useRef<Map<string, { guest: GuestEntry; timestamp: number }>>(new Map());
+
   const [guests, setGuests] = useState<GuestEntry[]>(() => {
     try {
       const saved = localStorage.getItem('smpn11palu_guests');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (err) {
       console.error('Failed to parse saved guests:', err);
     }
-    return INITIAL_GUESTS;
+    return [];
   });
 
   const syncGuestsWithGoogleSheets = useCallback(async (customUrl?: string) => {
@@ -42,41 +47,36 @@ export default function App() {
     }
 
     setIsSyncing(true);
-    setSyncStatus('idle');
 
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        setGuests((prevLocal) => {
-          const remoteKeys = new Set<string>();
-          remoteGuests.forEach((g) => {
-            if (g.id) remoteKeys.add(g.id);
-            const nameKey = `${(g.nama || '').trim().toLowerCase()}_${(g.waktu || '').trim()}`;
-            remoteKeys.add(nameKey);
-          });
+        // Google Sheets adalah SINGLE SOURCE OF TRUTH (Sumber Kebenaran Tunggal Database)
+        const remoteIds = new Set(remoteGuests.map((g) => g.id));
+        const remoteNameKeys = new Set(
+          remoteGuests.map((g) => `${(g.nama || '').trim().toLowerCase()}_${(g.waktu || '').trim()}`)
+        );
 
-          const combined = [...remoteGuests];
+        const updatedList = [...remoteGuests];
+        const now = Date.now();
 
-          // Pertahankan data lokal yang baru dibuat dalam 5 menit terakhir yang belum masuk ke Google Sheets
-          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-          (prevLocal || []).forEach((localItem) => {
-            const nameKey = `${(localItem.nama || '').trim().toLowerCase()}_${(localItem.waktu || '').trim()}`;
-            const exists = remoteKeys.has(localItem.id) || remoteKeys.has(nameKey);
-            if (!exists) {
-              const itemTime = new Date(localItem.waktu).getTime();
-              const isRecent = !isNaN(itemTime) ? itemTime > fiveMinutesAgo : true;
-              if (isRecent) {
-                combined.push(localItem);
-              }
+        // Gabungkan hanya inputan yang baru dilakukan di HP/browser ini dalam 15 detik terakhir yang belum sempat diproses oleh Google Apps Script
+        recentLocalEntriesRef.current.forEach((val, keyId) => {
+          if (now - val.timestamp < 15000) {
+            const nameKey = `${(val.guest.nama || '').trim().toLowerCase()}_${(val.guest.waktu || '').trim()}`;
+            if (!remoteIds.has(keyId) && !remoteNameKeys.has(nameKey)) {
+              updatedList.push(val.guest);
             }
-          });
-
-          try {
-            localStorage.setItem('smpn11palu_guests', JSON.stringify(combined));
-          } catch (e) {}
-
-          return combined;
+          } else {
+            recentLocalEntriesRef.current.delete(keyId);
+          }
         });
+
+        setGuests(updatedList);
+        try {
+          localStorage.setItem('smpn11palu_guests', JSON.stringify(updatedList));
+        } catch (e) {}
+
         setSyncStatus('success');
       } else {
         setSyncStatus('idle');
@@ -167,11 +167,11 @@ export default function App() {
     window.addEventListener('apps_script_url_changed', handleUrlChange);
     window.addEventListener('settings_changed', handleSettingsEvent);
 
-    // Auto-poll rekap sinkronisasi setiap 20 detik
+    // Auto-poll rekap sinkronisasi setiap 8 detik agar HP dan Laptop selalu realtime seragam
     const interval = setInterval(() => {
       syncGuestsWithGoogleSheets();
       fetchSettingsFromGoogleSheets();
-    }, 20000);
+    }, 8000);
 
     return () => {
       window.removeEventListener('apps_script_url_changed', handleUrlChange);
@@ -192,15 +192,31 @@ export default function App() {
   const toggleTab = () => setActiveTab((prev) => (prev === 'form' ? 'admin' : 'form'));
 
   const handleAddGuest = (newGuest: GuestEntry) => {
-    setGuests((prev) => [...prev, newGuest]);
-    // Otomatis sinkronkan ulang setelah 2.5 detik agar seluruh perangkat (HP & Laptop) menerima update terbaru
+    recentLocalEntriesRef.current.set(newGuest.id, { guest: newGuest, timestamp: Date.now() });
+    setGuests((prev) => {
+      const filtered = prev.filter((g) => g.id !== newGuest.id);
+      const nextList = [...filtered, newGuest];
+      try {
+        localStorage.setItem('smpn11palu_guests', JSON.stringify(nextList));
+      } catch (e) {}
+      return nextList;
+    });
+
+    // Otomatis sinkronkan ulang setelah 2.5 detik
     setTimeout(() => {
       syncGuestsWithGoogleSheets();
     }, 2500);
   };
 
   const handleDeleteGuest = (id: string) => {
-    setGuests((prev) => prev.filter((g) => g.id !== id));
+    recentLocalEntriesRef.current.delete(id);
+    setGuests((prev) => {
+      const nextList = prev.filter((g) => g.id !== id);
+      try {
+        localStorage.setItem('smpn11palu_guests', JSON.stringify(nextList));
+      } catch (e) {}
+      return nextList;
+    });
   };
 
   const handleRefreshGuests = async () => {
