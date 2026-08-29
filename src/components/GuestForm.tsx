@@ -75,7 +75,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
     };
 
     // Kirim data langsung ke Google Sheets secara pasti & instan (keberhasilan sinkronisasi jaringan HP)
-    sendGuestToGoogleSheets(newEntry);
+    await sendGuestToGoogleSheets(newEntry);
 
     onAddGuest(newEntry);
     setSubmittedGuest(newEntry);

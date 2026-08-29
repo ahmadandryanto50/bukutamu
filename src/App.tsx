@@ -47,27 +47,10 @@ export default function App() {
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        setGuests((prevLocal) => {
-          const remoteMap = new Set<string>();
-          remoteGuests.forEach((g) => {
-            if (g.id) remoteMap.add(g.id);
-            if (g.nama && g.waktu) remoteMap.add(`${g.nama.trim().toLowerCase()}_${g.waktu}`);
-          });
-
-          // Retain local items that might not have landed in remote sheet yet
-          const combined = [...remoteGuests];
-          (prevLocal || []).forEach((localItem) => {
-            const key = `${(localItem.nama || '').trim().toLowerCase()}_${localItem.waktu}`;
-            if (!remoteMap.has(localItem.id) && !remoteMap.has(key)) {
-              combined.push(localItem);
-            }
-          });
-
-          try {
-            localStorage.setItem('smpn11palu_guests', JSON.stringify(combined));
-          } catch (e) {}
-          return combined;
-        });
+        setGuests(remoteGuests);
+        try {
+          localStorage.setItem('smpn11palu_guests', JSON.stringify(remoteGuests));
+        } catch (e) {}
         setSyncStatus('success');
       } else {
         setSyncStatus('idle');
@@ -184,6 +167,10 @@ export default function App() {
 
   const handleAddGuest = (newGuest: GuestEntry) => {
     setGuests((prev) => [...prev, newGuest]);
+    // Otomatis sinkronkan ulang setelah 2.5 detik agar seluruh perangkat (HP & Laptop) menerima update terbaru
+    setTimeout(() => {
+      syncGuestsWithGoogleSheets();
+    }, 2500);
   };
 
   const handleDeleteGuest = (id: string) => {

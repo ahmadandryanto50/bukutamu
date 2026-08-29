@@ -100,10 +100,15 @@ async function startServer() {
         return;
       }
 
+      const timestamp = Date.now();
+      const fetchUrl = url.includes("?")
+        ? `${url}&action=getGuests&_t=${timestamp}`
+        : `${url}?action=getGuests&_t=${timestamp}`;
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await fetch(fetchUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (!response.ok) {
@@ -123,11 +128,11 @@ async function startServer() {
     try {
       const url = req.body?.targetUrl || getSavedAppsScriptUrl(req);
       if (!url) {
-        res.status(400).json({ error: "URL database belum dikonfigurasi." });
+        res.status(400).json({ success: false, error: "URL database belum dikonfigurasi." });
         return;
       }
 
-      const params = new URLSearchParams({
+      const guestData = {
         action: 'addGuest',
         kategori: req.body?.kategori || 'Umum',
         nama: req.body?.nama || '',
@@ -138,21 +143,38 @@ async function startServer() {
         saran: req.body?.saran || '',
         nohp: req.body?.nohp || req.body?.noHp || '',
         _t: String(Date.now()),
-      });
+      };
 
+      const params = new URLSearchParams(guestData);
       const fullUrl = url.includes('?') ? `${url}&${params.toString()}` : `${url}?${params.toString()}`;
 
-      // Call Google Apps Script via GET request
-      // GET requests preserve all parameters in e.parameter across Google Apps Script 302 redirects!
-      const response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
-      let jsonRes = null;
+      // 1. Try GET request first (query params in GET survive 302 redirects in Google Apps Script)
+      let response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
+      let jsonRes: any = null;
       if (response && response.ok) {
         jsonRes = await response.json().catch(() => null);
       }
 
-      res.json({ success: true, result: jsonRes });
+      // 2. Backup: If GET did not return a valid success JSON, try POST method
+      if (!jsonRes || (jsonRes.status !== 'success' && !jsonRes.success)) {
+        response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=UTF-8" },
+          body: JSON.stringify(guestData),
+        }).catch(() => null);
+        if (response && response.ok) {
+          jsonRes = await response.json().catch(() => null);
+        }
+      }
+
+      const isSuccess = jsonRes && (jsonRes.status === 'success' || jsonRes.success === true);
+      if (isSuccess) {
+        res.json({ success: true, result: jsonRes });
+      } else {
+        res.status(502).json({ success: false, error: "Gagal menyimpan ke Google Apps Script.", result: jsonRes });
+      }
     } catch (error) {
-      res.status(500).json({ error: (error as any).message });
+      res.status(500).json({ success: false, error: (error as any).message });
     }
   });
 

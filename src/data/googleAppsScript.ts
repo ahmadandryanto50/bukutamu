@@ -403,6 +403,7 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
     const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
 
+    let proxySuccess = false;
     // 1. Coba proxy backend jika server NodeJS (Fullstack) aktif
     try {
       const proxyRes = await fetch('/api/guests', {
@@ -414,8 +415,8 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
         const contentType = proxyRes.headers.get('content-type') || '';
         if (contentType.toLowerCase().includes('application/json')) {
           const jsonRes = await proxyRes.json();
-          if (jsonRes && jsonRes.success) {
-            return true;
+          if (jsonRes && jsonRes.success && jsonRes.result && jsonRes.result.status === 'success') {
+            proxySuccess = true;
           }
         }
       }
@@ -424,6 +425,7 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
     }
 
     // 2. Garansi #1 untuk Mobile & Desktop di Vercel/Static site: HTML Form submit ke hidden iframe
+    // Pengiriman ini bersifat independen dan menjamin data masuk ke Google Sheets di semua browser HP/Laptop
     try {
       if (typeof document !== 'undefined') {
         let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
