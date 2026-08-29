@@ -106,14 +106,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       }
     };
 
+    const handleUrlChangeEvent = (e: any) => {
+      if (e.detail) {
+        setScriptUrl(e.detail);
+      }
+    };
+
     const sets = getStoredSettings();
     setSchoolName(sets.nama_sekolah);
     setSchoolLogo(sets.logo_url);
     setCopyrightText(sets.copyright);
+    setScriptUrl(getStoredAppsScriptUrl());
 
     window.addEventListener('settings_changed', handleSettingsEvent);
+    window.addEventListener('apps_script_url_changed', handleUrlChangeEvent);
     return () => {
       window.removeEventListener('settings_changed', handleSettingsEvent);
+      window.removeEventListener('apps_script_url_changed', handleUrlChangeEvent);
     };
   }, []);
 

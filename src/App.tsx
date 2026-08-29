@@ -66,19 +66,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Initial sync of guests & settings on mount
-    syncGuestsWithGoogleSheets();
-    
-    const syncSettings = async () => {
+    // Muat URL database permanen dari server terlebih dahulu
+    const initializeDatabaseUrl = async () => {
       try {
-        await fetchSettingsFromGoogleSheets();
+        const res = await fetch('/api/get-url');
+        const data = await res.json();
+        if (data && data.success && data.url) {
+          localStorage.setItem('smpn11palu_apps_script_url', data.url);
+          syncGuestsWithGoogleSheets(data.url);
+          fetchSettingsFromGoogleSheets(data.url);
+        } else {
+          // Jika server kosong tapi browser lokal ini punya URL, unggah ke server secara otomatis
+          const savedLocal = localStorage.getItem('smpn11palu_apps_script_url');
+          if (savedLocal && savedLocal.startsWith('https://script.google.com/') && savedLocal.includes('/exec') && !savedLocal.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
+            fetch('/api/save-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: savedLocal })
+            }).catch(() => {});
+          }
+          syncGuestsWithGoogleSheets();
+          fetchSettingsFromGoogleSheets();
+        }
       } catch (err) {
-        console.warn('Sync settings error on mount:', err);
+        console.warn('Gagal memuat URL database dari server:', err);
+        syncGuestsWithGoogleSheets();
+        fetchSettingsFromGoogleSheets();
       }
     };
-    syncSettings();
+    
+    initializeDatabaseUrl();
 
-    // Listen for Web App URL change event when saved in Admin Dashboard
+    // Dengarkan perubahan URL Web App saat disimpan di Admin Dashboard
     const handleUrlChange = (e: any) => {
       syncGuestsWithGoogleSheets(e.detail);
       fetchSettingsFromGoogleSheets(e.detail);
@@ -93,7 +112,7 @@ export default function App() {
     window.addEventListener('apps_script_url_changed', handleUrlChange);
     window.addEventListener('settings_changed', handleSettingsEvent);
 
-    // Auto-poll sync every 20 seconds
+    // Auto-poll rekap sinkronisasi setiap 20 detik
     const interval = setInterval(() => {
       syncGuestsWithGoogleSheets();
       fetchSettingsFromGoogleSheets();
