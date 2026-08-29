@@ -27,12 +27,14 @@ async function startServer() {
   app.post("/api/save-url", (req, res) => {
     try {
       const { url } = req.body;
-      if (!url || !url.startsWith("https://script.google.com/") || !url.includes("/exec")) {
+      const isClearing = url === "" || url === null || url === undefined;
+      
+      if (!isClearing && (!url.startsWith("https://script.google.com/") || !url.includes("/exec"))) {
         res.status(400).json({ success: false, error: "Format URL tidak valid." });
         return;
       }
 
-      const trimmedUrl = url.trim();
+      const trimmedUrl = isClearing ? "" : url.trim();
 
       // 1. Simpan ke src/data/config.json (Persistensi runtime server)
       const configPath = path.join(process.cwd(), "src/data/config.json");
@@ -55,7 +57,7 @@ async function startServer() {
         }
       }
 
-      res.json({ success: true, message: "URL database berhasil disimpan secara permanen!" });
+      res.json({ success: true, message: isClearing ? "URL database berhasil dihapus. Aplikasi kembali ke mode offline." : "URL database berhasil disimpan secara permanen!" });
     } catch (error) {
       res.status(500).json({ success: false, error: (error as any).message });
     }
@@ -78,7 +80,7 @@ async function startServer() {
       const configPath = path.join(process.cwd(), "src/data/config.json");
       if (fs.existsSync(configPath)) {
         const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        if (data && data.appsScriptUrl) {
+        if (data && typeof data.appsScriptUrl === 'string') {
           return data.appsScriptUrl.trim();
         }
       }

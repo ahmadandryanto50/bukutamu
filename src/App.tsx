@@ -35,8 +35,9 @@ export default function App() {
   });
 
   const syncGuestsWithGoogleSheets = useCallback(async (customUrl?: string) => {
-    const url = customUrl || getStoredAppsScriptUrl();
+    const url = typeof customUrl === 'string' ? customUrl : getStoredAppsScriptUrl();
     if (!url || !url.startsWith('https://script.google.com/')) {
+      setSyncStatus('idle');
       return;
     }
 
@@ -71,12 +72,12 @@ export default function App() {
       try {
         const res = await fetch('/api/get-url');
         const data = await res.json();
-        if (data && data.success && data.url) {
+        if (data && data.success && typeof data.url === 'string') {
           setStoredAppsScriptUrl(data.url);
           syncGuestsWithGoogleSheets(data.url);
           fetchSettingsFromGoogleSheets(data.url);
         } else {
-          // Jika server kosong tapi browser lokal ini punya URL, unggah ke server secara otomatis
+          // Jika server gagal, coba cek localStorage
           const savedLocal = localStorage.getItem('smpn11palu_apps_script_url');
           if (savedLocal && savedLocal.startsWith('https://script.google.com/') && savedLocal.includes('/exec') && !savedLocal.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
             fetch('/api/save-url', {

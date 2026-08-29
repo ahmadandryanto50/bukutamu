@@ -80,7 +80,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     // 2. Fallback check for standard default accounts (ONLY allowed if Google Sheets URL is not configured yet)
     if (!isSuccess && !getStoredAppsScriptUrl()) {
       const defaultUsers = ['admin', 'smpn11palu', 'smpn11', 'smp11', 'operator'];
-      const defaultPasses = ['admin123', 'admin', 'smpn11palu', 'smp11palu', '123456'];
+      const defaultPasses = ['123', 'admin123', 'admin', 'smpn11palu', 'smp11palu', '123456'];
       if (defaultUsers.includes(inputUser) && defaultPasses.includes(inputPass)) {
         isSuccess = true;
       }

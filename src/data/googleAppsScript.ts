@@ -227,7 +227,11 @@ export const setStoredAppsScriptUrl = (url: string): void => {
   const trimmed = url.trim();
   inMemoryAppsScriptUrl = trimmed;
   if (typeof window !== 'undefined') {
-    localStorage.setItem('smpn11palu_apps_script_url', trimmed);
+    if (trimmed === "") {
+      localStorage.removeItem('smpn11palu_apps_script_url');
+    } else {
+      localStorage.setItem('smpn11palu_apps_script_url', trimmed);
+    }
     window.dispatchEvent(new CustomEvent('apps_script_url_changed', { detail: trimmed }));
   }
 };

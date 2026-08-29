@@ -1275,12 +1275,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       
                       <form onSubmit={handleSaveUrl} className="flex flex-col sm:flex-row gap-2">
                         <input
-                          type="url"
+                          type="text"
                           value={scriptUrl}
                           onChange={(e) => setScriptUrl(e.target.value)}
-                          placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                          placeholder="https://script.google.com/macros/s/AKfycb.../exec (Kosongkan untuk offline)"
                           className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none"
-                          required
                         />
                         <button
                           type="submit"
