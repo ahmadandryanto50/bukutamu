@@ -16,15 +16,8 @@ async function startServer() {
   // API Route: Ambil URL database Google Sheets yang tersimpan di server
   app.get("/api/get-url", (req, res) => {
     try {
-      const configPath = path.join(process.cwd(), "src/data/config.json");
-      if (fs.existsSync(configPath)) {
-        const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        if (data && data.appsScriptUrl) {
-          res.json({ success: true, url: data.appsScriptUrl.trim() });
-          return;
-        }
-      }
-      res.json({ success: true, url: "" });
+      const activeUrl = getSavedAppsScriptUrl(req);
+      res.json({ success: true, url: activeUrl });
     } catch (error) {
       res.status(500).json({ success: false, error: (error as any).message });
     }
@@ -73,6 +66,14 @@ async function startServer() {
     if (req && req.query && req.query.targetUrl) {
       return String(req.query.targetUrl).trim();
     }
+    // 1. Cek environment variables terlebih dahulu
+    if (process.env.VITE_APPS_SCRIPT_URL) {
+      return process.env.VITE_APPS_SCRIPT_URL.trim();
+    }
+    if (process.env.APPS_SCRIPT_URL) {
+      return process.env.APPS_SCRIPT_URL.trim();
+    }
+    // 2. Cek config.json di disk
     try {
       const configPath = path.join(process.cwd(), "src/data/config.json");
       if (fs.existsSync(configPath)) {

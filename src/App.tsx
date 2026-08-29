@@ -5,7 +5,7 @@ import { Header } from './components/Header';
 import { GuestForm } from './components/GuestForm';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, fetchSettingsFromGoogleSheets } from './data/googleAppsScript';
+import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets } from './data/googleAppsScript';
 import { getStoredSettings, AppSettings } from './data/settings';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -72,7 +72,7 @@ export default function App() {
         const res = await fetch('/api/get-url');
         const data = await res.json();
         if (data && data.success && data.url) {
-          localStorage.setItem('smpn11palu_apps_script_url', data.url);
+          setStoredAppsScriptUrl(data.url);
           syncGuestsWithGoogleSheets(data.url);
           fetchSettingsFromGoogleSheets(data.url);
         } else {

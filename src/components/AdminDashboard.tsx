@@ -1301,9 +1301,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <span>🚀</span> Cara Kerja Koneksi Otomatis:
                       </p>
                       <ul className="list-disc pl-5 space-y-1 font-medium">
-                        <li>URL ini disimpan di memori browser Anda & siap dipakai ketika formulir diisi.</li>
-                        <li>Saat diexport ke <strong>GitHub</strong> & <strong>Vercel</strong>, Anda tinggal memasukkan variabel lingkungan <code>VITE_APPS_SCRIPT_URL</code>.</li>
-                        <li>Tidak ada kode lokal yang rusak; sistem mendukung sinkronisasi lokal maupun cloud secara transparan.</li>
+                        <li>URL ini disimpan secara permanen di server aplikasi dan otomatis diterapkan ke seluruh HP serta komputer pengguna secara real-time.</li>
+                        <li>Pengunjung (tamu) tidak perlu melakukan konfigurasi apa pun lagi; aplikasi langsung tersinkron ke Google Sheets secara otomatis.</li>
+                        <li>Aman dan andal dengan teknologi Proxy Server yang bebas dari masalah pemblokiran CORS browser.</li>
                       </ul>
                     </div>
 
