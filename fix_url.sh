@@ -1,0 +1,3 @@
+#!/bin/bash
+sed -i 's/AKfycbyZ8TmDdEtNT6sC8I7agiAlb4D5GUjCbKUyl6H4DBuZ67Zpnqa59fUee1ux4m3o9c-N/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/g' src/data/googleAppsScript.ts
+sed -i 's/AKfycbyZ8TmDdEtNT6sC8I7agiAlb4D5GUjCbKUyl6H4DBuZ67Zpnqa59fUee1ux4m3o9c-N/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/g' src/App.tsx

@@ -5,7 +5,7 @@ import { Header } from './components/Header';
 import { GuestForm } from './components/GuestForm';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets } from './data/googleAppsScript';
+import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets, fetchAdminsFromGoogleSheets } from './data/googleAppsScript';
 import { getStoredSettings, AppSettings } from './data/settings';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -70,10 +70,17 @@ export default function App() {
     // Muat URL database permanen dari server terlebih dahulu
     const initializeDatabaseUrl = async () => {
       try {
-        const res = await fetch('/api/get-url');
-        const data = await res.json();
+        let serverUrl = '';
+        try {
+          const res = await fetch('/api/get-url');
+          if (res.ok) {
+            const data = await res.json();
+            serverUrl = data?.url || '';
+          }
+        } catch (e) {
+          // Ignore network errors on Vercel for this endpoint
+        }
         
-        const serverUrl = data?.url || '';
         const savedLocal = localStorage.getItem('smpn11palu_apps_script_url') || '';
         
         // Define default fallback URL to recognize it
@@ -98,6 +105,7 @@ export default function App() {
           setStoredAppsScriptUrl(finalUrl);
           syncGuestsWithGoogleSheets(finalUrl);
           fetchSettingsFromGoogleSheets(finalUrl);
+          fetchAdminsFromGoogleSheets(finalUrl);
         } else {
           setStoredAppsScriptUrl('');
           syncGuestsWithGoogleSheets('');
@@ -107,6 +115,7 @@ export default function App() {
         console.warn('Gagal memuat URL database dari server:', err);
         syncGuestsWithGoogleSheets();
         fetchSettingsFromGoogleSheets();
+        fetchAdminsFromGoogleSheets();
       }
     };
     
@@ -116,6 +125,7 @@ export default function App() {
     const handleUrlChange = (e: any) => {
       syncGuestsWithGoogleSheets(e.detail);
       fetchSettingsFromGoogleSheets(e.detail);
+      fetchAdminsFromGoogleSheets(e.detail);
     };
 
     const handleSettingsEvent = (e: any) => {

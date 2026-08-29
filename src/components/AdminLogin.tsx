@@ -41,14 +41,15 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     const inputUser = username.trim().toLowerCase();
     const inputPass = password.trim();
 
-    // 1. Check directly from live Google Sheets Admin Accounts
     let isSuccess = false;
-    let liveFetched = false;
+    let checkedFromDatabase = false;
+
     try {
-      if (getStoredAppsScriptUrl()) {
-        const liveAdmins = await fetchAdminsFromGoogleSheets();
-        if (liveAdmins && Array.isArray(liveAdmins)) {
-          liveFetched = true;
+      const url = getStoredAppsScriptUrl();
+      if (url) {
+        const liveAdmins = await fetchAdminsFromGoogleSheets(url);
+        if (liveAdmins && Array.isArray(liveAdmins) && liveAdmins.length > 0) {
+          checkedFromDatabase = true;
           const match = liveAdmins.find(
             (a: any) =>
               String(a.username || '').trim().toLowerCase() === inputUser &&
@@ -58,12 +59,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
         }
       }
 
-      // Only fallback to cached local storage if live network fetch failed
-      if (!liveFetched && !isSuccess) {
+      // Jika jaringan/live fetch gagal, gunakan cache data akun dari Google Sheets yang tersimpan
+      if (!checkedFromDatabase) {
         const savedAdminsRaw = localStorage.getItem('smpn11palu_synced_admins');
         if (savedAdminsRaw) {
           const savedAdmins = JSON.parse(savedAdminsRaw);
-          if (Array.isArray(savedAdmins)) {
+          if (Array.isArray(savedAdmins) && savedAdmins.length > 0) {
+            checkedFromDatabase = true;
             const match = savedAdmins.find(
               (a: any) =>
                 String(a.username || '').trim().toLowerCase() === inputUser &&
@@ -77,13 +79,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
       console.warn('Sync check error:', err);
     }
 
-    // 2. Fallback check for standard default accounts
-    if (!isSuccess) {
-      const defaultUsers = ['admin', 'smpn11palu', 'smpn11', 'smp11', 'operator', 'ops'];
-      const defaultPasses = ['123', 'admin123', 'admin', 'smpn11palu', 'smp11palu', '123456'];
-      if (defaultUsers.includes(inputUser) && defaultPasses.includes(inputPass)) {
-        isSuccess = true;
-      }
+    // Hanya jika database belum pernah terhubung/tersinkron sama sekali, gunakan akun awal standar Google Sheets ('admin'/'admin123' atau 'smpn11palu'/'smpn11palu')
+    if (!checkedFromDatabase) {
+      const initialDefaultAdmins = [
+        { username: 'admin', password: 'admin123' },
+        { username: 'smpn11palu', password: 'smpn11palu' }
+      ];
+      const match = initialDefaultAdmins.find(
+        (a) => a.username.toLowerCase() === inputUser && a.password === inputPass
+      );
+      if (match) isSuccess = true;
     }
 
     setTimeout(() => {
