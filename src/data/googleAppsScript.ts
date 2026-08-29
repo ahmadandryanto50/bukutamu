@@ -78,12 +78,68 @@ export const GOOGLE_APPS_SCRIPT_CODE = `function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
   
+  // Endpoint untuk menambahkan tamu (fallback via GET jika doPost gagal)
+  if (action === "addGuest") {
+    var resultMsg = submitData(e.parameter);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Endpoint default: Mengambil data tamu dari sheet 'DataTamu'
   var sheetTamu = ss.getSheetByName("DataTamu");
   var data = sheetTamu ? sheetTamu.getDataRange().getDisplayValues() : [];
   
   return ContentService.createTextOutput(JSON.stringify({ status: "success", data: data }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var action = e && e.parameter ? e.parameter.action : "";
+  var body = {};
+  if (e && e.postData && e.postData.contents) {
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (err) {
+      body = e.parameter;
+    }
+  } else if (e && e.parameter) {
+    body = e.parameter;
+  }
+  action = action || body.action || "";
+
+  if (action === "saveSettings") {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheetPengaturan = ss.getSheetByName("Pengaturan");
+    if (!sheetPengaturan) { setupDatabase(); sheetPengaturan = ss.getSheetByName("Pengaturan"); }
+    var dataRows = sheetPengaturan.getDataRange().getValues();
+    var keys = [];
+    for (var k = 0; k < dataRows.length; k++) { keys.push(String(dataRows[k][0]).trim()); }
+    
+    var keysToSave = ["nama_sekolah", "logo_url", "copyright"];
+    for (var j = 0; j < keysToSave.length; j++) {
+      var key = keysToSave[j];
+      var val = body[key];
+      if (val !== undefined && val !== null) {
+        var idx = keys.indexOf(key);
+        if (idx !== -1) {
+          sheetPengaturan.getRange(idx + 1, 2).setValue(val);
+        } else {
+          sheetPengaturan.appendRow([key, val, ""]);
+        }
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Pengaturan berhasil disimpan!" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === "addGuest" || body.nama) {
+    var resultMsg = submitData(body);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Aksi tidak dikenali di POST." }))
+      .setMimeType(ContentService.MimeType.JSON);
 }
 
 // Fungsi untuk menyiapkan sheet 'DataTamu', 'Admin', dan 'Pengaturan' otomatis
@@ -239,12 +295,22 @@ export const setStoredAppsScriptUrl = (url: string): void => {
 export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<any[] | null> => {
   try {
     const timestamp = Date.now();
-    const url = targetUrl 
+    const proxyUrl = targetUrl 
       ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}&_t=${timestamp}` 
       : `/api/guests?_t=${timestamp}`;
     
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) return null;
+    let response = await fetch(proxyUrl, { cache: 'no-store' }).catch(() => null);
+    
+    // FALLBACK: Jika server proxy tidak ada (misal di Vercel/GitHub Pages), lakukan direct fetch CORS
+    if (!response || !response.ok) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
+      
+      const directUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}action=getGuests&_t=${timestamp}`;
+      response = await fetch(directUrl, { cache: 'no-store' }).catch(() => null);
+      if (!response || !response.ok) return null;
+    }
+
     const json = await response.json();
     
     let rawRows: any[] = [];
@@ -304,14 +370,30 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
 
 export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): Promise<boolean> => {
   try {
-    const url = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
-    const response = await fetch(url, {
+    const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
+    let response = await fetch(proxyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(guest),
-    });
+    }).catch(() => null);
+
+    // FALLBACK: Jika server proxy gagal/404, lakukan POST langsung via text/plain (Bypass CORS Preflight)
+    if (!response || !response.ok) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
+      
+      response = await fetch(finalUrl, {
+        method: 'POST',
+        // Menggunakan text/plain secara default (tidak mengirim header Content-Type JSON)
+        // Ini menghindari CORS Preflight OPTIONS error di browser. Google Apps Script bisa mem-parsing postData.contents.
+        body: JSON.stringify({ action: 'addGuest', ...guest }),
+      }).catch(() => null);
+      
+      if (!response || !response.ok) return false;
+    }
+
     return response.ok;
   } catch (err) {
     console.warn('Gagal mengirim data ke Google Sheets:', err instanceof Error ? err.message : String(err));
@@ -321,9 +403,20 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
 
 export const fetchAdminsFromGoogleSheets = async (targetUrl?: string): Promise<any[] | null> => {
   try {
-    const url = targetUrl ? `/api/admins?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/admins';
-    const response = await fetch(url);
-    if (!response.ok) return null;
+    const proxyUrl = targetUrl ? `/api/admins?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/admins';
+    let response = await fetch(proxyUrl).catch(() => null);
+    
+    // FALLBACK Direct fetch
+    if (!response || !response.ok) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
+      
+      const timestamp = Date.now();
+      const directUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}action=getAdmins&_t=${timestamp}`;
+      response = await fetch(directUrl).catch(() => null);
+      if (!response || !response.ok) return null;
+    }
+
     const json = await response.json();
     if (json && json.status === 'success' && Array.isArray(json.admins)) {
       localStorage.setItem('smpn11palu_synced_admins', JSON.stringify(json.admins));
@@ -338,9 +431,20 @@ export const fetchAdminsFromGoogleSheets = async (targetUrl?: string): Promise<a
 
 export const fetchSettingsFromGoogleSheets = async (targetUrl?: string): Promise<Record<string, string> | null> => {
   try {
-    const url = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
-    const response = await fetch(url);
-    if (!response.ok) return null;
+    const proxyUrl = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
+    let response = await fetch(proxyUrl).catch(() => null);
+
+    // FALLBACK Direct fetch
+    if (!response || !response.ok) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
+      
+      const timestamp = Date.now();
+      const directUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}action=getSettings&_t=${timestamp}`;
+      response = await fetch(directUrl).catch(() => null);
+      if (!response || !response.ok) return null;
+    }
+
     const json = await response.json();
     if (json && json.status === 'success' && json.settings) {
       localStorage.setItem('smpn11palu_synced_settings', JSON.stringify(json.settings));
@@ -356,15 +460,28 @@ export const fetchSettingsFromGoogleSheets = async (targetUrl?: string): Promise
 
 export const saveSettingsToGoogleSheets = async (settings: Record<string, string>, targetUrl?: string): Promise<boolean> => {
   try {
-    const url = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
-    const response = await fetch(url, {
+    const proxyUrl = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
+    let response = await fetch(proxyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(settings),
-    });
-    if (!response.ok) return false;
+    }).catch(() => null);
+
+    // FALLBACK Bypass CORS
+    if (!response || !response.ok) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
+      
+      response = await fetch(finalUrl, {
+        method: 'POST',
+        // text/plain bypasses CORS Preflight
+        body: JSON.stringify({ action: 'saveSettings', ...settings }),
+      }).catch(() => null);
+      if (!response || !response.ok) return false;
+    }
+
     const json = await response.json();
     if (json && json.status === 'success') {
       localStorage.setItem('smpn11palu_synced_settings', JSON.stringify(settings));
