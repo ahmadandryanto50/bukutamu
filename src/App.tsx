@@ -72,22 +72,36 @@ export default function App() {
       try {
         const res = await fetch('/api/get-url');
         const data = await res.json();
-        if (data && data.success && typeof data.url === 'string') {
-          setStoredAppsScriptUrl(data.url);
-          syncGuestsWithGoogleSheets(data.url);
-          fetchSettingsFromGoogleSheets(data.url);
-        } else {
-          // Jika server gagal, coba cek localStorage
-          const savedLocal = localStorage.getItem('smpn11palu_apps_script_url');
-          if (savedLocal && savedLocal.startsWith('https://script.google.com/') && savedLocal.includes('/exec') && !savedLocal.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) {
+        
+        const serverUrl = data?.url || '';
+        const savedLocal = localStorage.getItem('smpn11palu_apps_script_url') || '';
+        
+        // Define default fallback URL to recognize it
+        const defaultFallbackUrl = 'https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec';
+        
+        let finalUrl = serverUrl;
+
+        // If server returns empty or default, BUT client has a custom URL, prioritize client's custom URL
+        if ((!serverUrl || serverUrl === defaultFallbackUrl) && savedLocal && savedLocal !== defaultFallbackUrl && savedLocal.startsWith('https://script.google.com/')) {
+            finalUrl = savedLocal;
+            // Push this valid local URL back to server to restore it
             fetch('/api/save-url', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url: savedLocal })
+              body: JSON.stringify({ url: finalUrl })
             }).catch(() => {});
-          }
-          syncGuestsWithGoogleSheets();
-          fetchSettingsFromGoogleSheets();
+        } else if (serverUrl === '' && !savedLocal) {
+            finalUrl = ''; // Clear explicitly
+        }
+
+        if (finalUrl) {
+          setStoredAppsScriptUrl(finalUrl);
+          syncGuestsWithGoogleSheets(finalUrl);
+          fetchSettingsFromGoogleSheets(finalUrl);
+        } else {
+          setStoredAppsScriptUrl('');
+          syncGuestsWithGoogleSheets('');
+          fetchSettingsFromGoogleSheets('');
         }
       } catch (err) {
         console.warn('Gagal memuat URL database dari server:', err);

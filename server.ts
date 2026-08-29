@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
+import { DEFAULT_APPS_SCRIPT_URL } from "./src/data/googleAppsScript";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,7 +88,7 @@ async function startServer() {
     } catch (err) {
       console.error("Gagal membaca appsScriptUrl dari config.json:", err);
     }
-    return "https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec";
+    return DEFAULT_APPS_SCRIPT_URL;
   }
 
   // Proxy Route: Ambil daftar tamu dari Google Sheets server-side
