@@ -397,107 +397,50 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       _t: String(Date.now()),
     };
 
-    // Prepare GET parameter string for 100% mobile compatibility across all browsers (iOS/Android)
     const params = new URLSearchParams(payloadData);
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
-
     const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
 
-    // 1. Send via navigator.sendBeacon (Dipertahankan 100% oleh sistem operasi HP iOS Safari/Android Chrome)
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      try {
-        const blob = new Blob([jsonBody], { type: 'text/plain;charset=UTF-8' });
-        navigator.sendBeacon(finalUrl, blob);
-        navigator.sendBeacon(getUrl);
-      } catch (e) {
-        // Ignore sendBeacon error
-      }
-    }
-
-    // 2. Coba kirim via server proxy backend (jika running di Fullstack server Node.js)
-    const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
-    fetch(proxyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(guest),
-      keepalive: true,
-    }).catch(() => null);
-
-    // 3. Garansi 100% untuk Mobile Browser di Vercel/Static site: HTML Form submit ke hidden iframe
+    // 1. Jika backend proxy aktif (misal running server fullstack), kirim via proxy
     try {
-      if (typeof document !== 'undefined') {
-        let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
-        if (!iframe) {
-          iframe = document.createElement('iframe');
-          iframe.id = 'gscript_hidden_iframe';
-          iframe.name = 'gscript_hidden_iframe';
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-        }
-
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = getUrl;
-        form.target = 'gscript_hidden_iframe';
-        form.style.display = 'none';
-
-        for (const [key, value] of Object.entries(payloadData)) {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = value || '';
-          form.appendChild(input);
-        }
-
-        document.body.appendChild(form);
-        form.submit();
-
-        setTimeout(() => {
-          if (document.body.contains(form)) {
-            document.body.removeChild(form);
-          }
-        }, 3000);
+      const proxyRes = await fetch('/api/guests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...guest, targetUrl: finalUrl }),
+        keepalive: true,
+      });
+      if (proxyRes && proxyRes.ok) {
+        return true;
       }
     } catch (e) {
-      console.warn('Hidden form submit warning:', e);
+      // Proxy tidak tersedia (misal di Vercel static build), lanjut ke direct fetch
     }
 
-    // 4. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors' + keepalive)
-    fetch(getUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: jsonBody,
-      keepalive: true,
-    }).catch(() => null);
-
-    // 5. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter + keepalive)
-    fetch(getUrl, {
-      method: 'GET',
-      mode: 'no-cors',
-      cache: 'no-store',
-      keepalive: true,
-    }).catch(() => null);
-
-    // 5. Fallback persistent Image beacon ping (Tembus CORS & Webview Mobile Safari/Chrome tanpa GC)
+    // 2. Kirim langsung via fetch POST dengan mode no-cors & keepalive (Standar 100% kompatibel di HP Android/iOS)
+    let postSuccess = false;
     try {
-      if (typeof window !== 'undefined') {
-        if (!(window as any)._gscriptPingImages) {
-          (window as any)._gscriptPingImages = [];
-        }
+      await fetch(getUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+        },
+        body: jsonBody,
+        keepalive: true,
+      });
+      postSuccess = true;
+    } catch (e) {
+      console.warn('POST request error:', e);
+    }
+
+    // 3. Fallback jika POST gagal total pada browser tua: Image beacon ping sederhana
+    if (!postSuccess) {
+      try {
         const img = new Image();
         img.src = getUrl;
-        (window as any)._gscriptPingImages.push(img);
-        if ((window as any)._gscriptPingImages.length > 20) {
-          (window as any)._gscriptPingImages.shift();
-        }
+      } catch (e) {
+        // Ignore
       }
-    } catch (e) {
-      // Ignore
     }
 
     return true;

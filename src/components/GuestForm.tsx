@@ -253,7 +253,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         onChange={handleChange}
                         placeholder="Nama lengkap beserta gelar"
                         required
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
                       />
                     </div>
 
@@ -300,7 +300,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         onChange={handleChange}
                         placeholder="Contoh: Dinas Pendidikan"
                         required
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
                       />
                     </div>
 
@@ -316,7 +316,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         onChange={handleChange}
                         placeholder="Contoh: 081234567890"
                         required
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
                       />
                     </div>
                   </div>
@@ -343,7 +343,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         onChange={handleChange}
                         placeholder="Nama atau Jabatan (Contoh: Kepala Sekolah)"
                         required
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none"
                       />
                     </div>
 
@@ -359,7 +359,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         onChange={handleChange}
                         placeholder="Jelaskan maksud dan tujuan kunjungan secara detail..."
                         required
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none resize-y"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none resize-y"
                       />
                     </div>
 
@@ -374,7 +374,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                         value={formData.saran}
                         onChange={handleChange}
                         placeholder={`Saran atau masukan untuk ${settings.nama_sekolah}...`}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none resize-y"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-all outline-none resize-y"
                       />
                     </div>
                   </div>
@@ -410,9 +410,9 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
     {/* Kolom Kanan: Live Monitor Statistik & Daftar Kehadiran Terbaru */}
     <div className="lg:col-span-5 xl:col-span-4 space-y-6">
       {/* Papan Monitor Kunjungan */}
-      <div className="bg-white/10 dark:bg-slate-900/40 backdrop-blur-md rounded-3xl p-6 border border-white/10 shadow-2xl space-y-6 relative overflow-hidden">
+      <div className="bg-[#0B213E] rounded-3xl p-6 border border-white/10 shadow-xl space-y-6 relative overflow-hidden">
         {/* Background Accent */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/10 rounded-full pointer-events-none" />
         
         {/* Live Indicator Header */}
         <div className="flex items-center justify-between border-b border-white/5 pb-4">

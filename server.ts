@@ -121,7 +121,7 @@ async function startServer() {
   // Proxy Route: Kirim data tamu baru ke Google Sheets server-side
   app.post("/api/guests", async (req, res) => {
     try {
-      const url = getSavedAppsScriptUrl(req);
+      const url = req.body?.targetUrl || getSavedAppsScriptUrl(req);
       if (!url) {
         res.status(400).json({ error: "URL database belum dikonfigurasi." });
         return;
@@ -129,31 +129,27 @@ async function startServer() {
 
       const params = new URLSearchParams({
         action: 'addGuest',
-        kategori: req.body.kategori || 'Umum',
-        nama: req.body.nama || '',
-        jk: req.body.jk || '',
-        instansi: req.body.instansi || '',
-        tujuan: req.body.tujuan || '',
-        keperluan: req.body.keperluan || '',
-        saran: req.body.saran || '',
-        nohp: req.body.nohp || '',
+        kategori: req.body?.kategori || 'Umum',
+        nama: req.body?.nama || '',
+        jk: req.body?.jk || '',
+        instansi: req.body?.instansi || '',
+        tujuan: req.body?.tujuan || '',
+        keperluan: req.body?.keperluan || '',
+        saran: req.body?.saran || '',
+        nohp: req.body?.nohp || '',
         _t: String(Date.now()),
       });
 
       const fullUrl = url.includes('?') ? `${url}&${params.toString()}` : `${url}?${params.toString()}`;
 
-      // Kirim via GET/POST dengan query params lengkap di URL
-      // Google Apps Script redirect (302) akan mempertahankan parameter URL pada doGet
+      // Single clean POST request to Apps Script from server side
       await fetch(fullUrl, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "text/plain",
         },
         body: JSON.stringify({ action: "addGuest", ...req.body }),
       }).catch(() => null);
-
-      // Pastikan panggil GET ke fullUrl jika POST dialihkan (redirect) oleh Google Apps Script
-      await fetch(fullUrl, { method: "GET" }).catch(() => null);
 
       res.json({ success: true });
     } catch (error) {
