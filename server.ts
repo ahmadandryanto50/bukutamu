@@ -132,26 +132,25 @@ async function startServer() {
         kategori: req.body?.kategori || 'Umum',
         nama: req.body?.nama || '',
         jk: req.body?.jk || '',
-        instansi: req.body?.instansi || '',
-        tujuan: req.body?.tujuan || '',
-        keperluan: req.body?.keperluan || '',
+        instansi: req.body?.instansi || '-',
+        tujuan: req.body?.tujuan || '-',
+        keperluan: req.body?.keperluan || '-',
         saran: req.body?.saran || '',
-        nohp: req.body?.nohp || '',
+        nohp: req.body?.nohp || req.body?.noHp || '',
         _t: String(Date.now()),
       });
 
       const fullUrl = url.includes('?') ? `${url}&${params.toString()}` : `${url}?${params.toString()}`;
 
-      // Single clean POST request to Apps Script from server side
-      await fetch(fullUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
-        },
-        body: JSON.stringify({ action: "addGuest", ...req.body }),
-      }).catch(() => null);
+      // Call Google Apps Script via GET request
+      // GET requests preserve all parameters in e.parameter across Google Apps Script 302 redirects!
+      const response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
+      let jsonRes = null;
+      if (response && response.ok) {
+        jsonRes = await response.json().catch(() => null);
+      }
 
-      res.json({ success: true });
+      res.json({ success: true, result: jsonRes });
     } catch (error) {
       res.status(500).json({ error: (error as any).message });
     }

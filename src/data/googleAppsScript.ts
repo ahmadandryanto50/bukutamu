@@ -389,19 +389,18 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       kategori: guest.kategori || 'Umum',
       nama: guest.nama || '',
       jk: guest.jk || '',
-      instansi: guest.instansi || '',
-      tujuan: guest.tujuan || '',
-      keperluan: guest.keperluan || '',
+      instansi: guest.instansi || '-',
+      tujuan: guest.tujuan || '-',
+      keperluan: guest.keperluan || '-',
       saran: guest.saran || '',
-      nohp: guest.nohp || '',
+      nohp: guest.nohp || guest.noHp || '',
       _t: String(Date.now()),
     };
 
     const params = new URLSearchParams(payloadData);
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
-    const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
 
-    // 1. Jika backend proxy aktif (misal running server fullstack), kirim via proxy
+    // 1. Kirim via server proxy backend (/api/guests) jika server NodeJS aktif
     try {
       const proxyRes = await fetch('/api/guests', {
         method: 'POST',
@@ -413,34 +412,30 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
         return true;
       }
     } catch (e) {
-      // Proxy tidak tersedia (misal di Vercel static build), lanjut ke direct fetch
+      // Proxy tidak tersedia (misal di Vercel static site), lanjut ke direct GET fetch
     }
 
-    // 2. Kirim langsung via fetch POST dengan mode no-cors & keepalive (Standar 100% kompatibel di HP Android/iOS)
-    let postSuccess = false;
+    // 2. Direct GET fetch ke Google Apps Script (mode: 'no-cors')
+    // GET request dijamin mempertahankan query params di e.parameter saat Google Apps Script melakukan 302 redirect
     try {
       await fetch(getUrl, {
-        method: 'POST',
+        method: 'GET',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=UTF-8',
-        },
-        body: jsonBody,
+        cache: 'no-store',
         keepalive: true,
       });
-      postSuccess = true;
     } catch (e) {
-      console.warn('POST request error:', e);
+      console.warn('GET request error:', e);
     }
 
-    // 3. Fallback jika POST gagal total pada browser tua: Image beacon ping sederhana
-    if (!postSuccess) {
-      try {
+    // 3. Fallback Image beacon ping (Garansi 100% untuk browser HP/Laptop di site statis tanpa CORS)
+    try {
+      if (typeof window !== 'undefined') {
         const img = new Image();
         img.src = getUrl;
-      } catch (e) {
-        // Ignore
       }
+    } catch (e) {
+      // Ignore
     }
 
     return true;

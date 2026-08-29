@@ -47,8 +47,27 @@ export default function App() {
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        setGuests(remoteGuests);
-        localStorage.setItem('smpn11palu_guests', JSON.stringify(remoteGuests));
+        setGuests((prevLocal) => {
+          const remoteMap = new Set<string>();
+          remoteGuests.forEach((g) => {
+            if (g.id) remoteMap.add(g.id);
+            if (g.nama && g.waktu) remoteMap.add(`${g.nama.trim().toLowerCase()}_${g.waktu}`);
+          });
+
+          // Retain local items that might not have landed in remote sheet yet
+          const combined = [...remoteGuests];
+          (prevLocal || []).forEach((localItem) => {
+            const key = `${(localItem.nama || '').trim().toLowerCase()}_${localItem.waktu}`;
+            if (!remoteMap.has(localItem.id) && !remoteMap.has(key)) {
+              combined.push(localItem);
+            }
+          });
+
+          try {
+            localStorage.setItem('smpn11palu_guests', JSON.stringify(combined));
+          } catch (e) {}
+          return combined;
+        });
         setSyncStatus('success');
       } else {
         setSyncStatus('idle');

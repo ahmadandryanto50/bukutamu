@@ -34,7 +34,20 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
   }, []);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedGuest, setSubmittedGuest] = useState<GuestEntry | null>(null);
+  const [submittedGuest, setSubmittedGuest] = useState<GuestEntry | null>(() => {
+    try {
+      const saved = localStorage.getItem('smpn11palu_submitted_guest');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  });
+
+  const handleResetForm = () => {
+    setSubmittedGuest(null);
+    try {
+      localStorage.removeItem('smpn11palu_submitted_guest');
+    } catch (e) {}
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -66,9 +79,12 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
 
     onAddGuest(newEntry);
     setSubmittedGuest(newEntry);
+    try {
+      localStorage.setItem('smpn11palu_submitted_guest', JSON.stringify(newEntry));
+    } catch (e) {}
     setIsSubmitting(false);
 
-    // Reset form
+    // Reset form data for next submission
     setFormData({
       kategori: 'Umum',
       nama: '',
@@ -164,12 +180,13 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 flex justify-center">
+              <div className="mt-8 pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
-                  onClick={() => setSubmittedGuest(null)}
-                  className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors flex items-center gap-2"
+                  onClick={handleResetForm}
+                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20"
                 >
-                  Kembali ke Halaman Utama
+                  <Send className="w-4 h-4" />
+                  <span>Isi Buku Tamu Lagi</span>
                 </button>
               </div>
             </div>
