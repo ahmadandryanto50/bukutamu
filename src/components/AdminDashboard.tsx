@@ -93,14 +93,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeModalTab, setActiveModalTab] = useState<'script' | 'url' | 'vercel'>('url');
   const [isCopied, setIsCopied] = useState(false);
   const [isUrlCopied, setIsUrlCopied] = useState(false);
+  const [isShareUrlCopied, setIsShareUrlCopied] = useState(false);
   const [scriptUrl, setScriptUrl] = useState(getStoredAppsScriptUrl());
   const [isSavedUrl, setIsSavedUrl] = useState(false);
 
   useEffect(() => {
+    const handleSettingsEvent = (e: any) => {
+      if (e.detail) {
+        setSchoolName(e.detail.nama_sekolah || '');
+        setSchoolLogo(e.detail.logo_url || '');
+        setCopyrightText(e.detail.copyright || '');
+      }
+    };
+
     const sets = getStoredSettings();
     setSchoolName(sets.nama_sekolah);
     setSchoolLogo(sets.logo_url);
     setCopyrightText(sets.copyright);
+
+    window.addEventListener('settings_changed', handleSettingsEvent);
+    return () => {
+      window.removeEventListener('settings_changed', handleSettingsEvent);
+    };
   }, []);
 
   const handleSaveSettings = async (e: React.FormEvent) => {
@@ -152,10 +166,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setIsUrlCopied(false), 2000);
   };
 
-  const handleSaveUrl = (e: React.FormEvent) => {
+  const handleSaveUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     setStoredAppsScriptUrl(scriptUrl);
     setIsSavedUrl(true);
+    
+    // Panggang (bake) URL ke kode sumber server secara permanen jika sedang berjalan di preview pembuat
+    try {
+      await fetch('/api/save-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: scriptUrl })
+      });
+    } catch (err) {
+      console.warn('Sistem mencadangkan URL ke penyimpanan browser lokal saja:', err);
+    }
+
     setTimeout(() => setIsSavedUrl(false), 2000);
   };
 
@@ -1270,6 +1296,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <li>Saat diexport ke <strong>GitHub</strong> & <strong>Vercel</strong>, Anda tinggal memasukkan variabel lingkungan <code>VITE_APPS_SCRIPT_URL</code>.</li>
                         <li>Tidak ada kode lokal yang rusak; sistem mendukung sinkronisasi lokal maupun cloud secara transparan.</li>
                       </ul>
+                    </div>
+
+                    <div className="border border-purple-100 bg-purple-50/70 rounded-xl p-4 text-xs text-purple-900 space-y-2">
+                      <p className="font-bold text-sm text-purple-950 flex items-center gap-1.5">
+                        <span>📱</span> Buka Aplikasi di HP / Browser Lain:
+                      </p>
+                      <p className="font-medium text-purple-900 leading-relaxed">
+                        Agar saat dibuka di HP, tablet, atau laptop lain tampilannya <strong>langsung tersambung secara otomatis</strong> tanpa perlu mengisi ulang URL Web App di perangkat baru, silakan gunakan atau bagikan tautan khusus di bawah ini ke HP Anda (lewat WA/Email):
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={scriptUrl ? `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(scriptUrl)}` : 'Harap simpan URL Web App terlebih dahulu...'}
+                          className="flex-1 bg-white border border-purple-200 rounded-lg px-3 py-2 text-xs font-mono text-purple-800 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!scriptUrl) return;
+                            const shareLink = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(scriptUrl)}`;
+                            navigator.clipboard.writeText(shareLink);
+                            setIsShareUrlCopied(true);
+                            setTimeout(() => setIsShareUrlCopied(false), 2000);
+                          }}
+                          disabled={!scriptUrl}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                        >
+                          {isShareUrlCopied ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Salin Link HP</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-purple-600/90 font-medium">
+                        * Tautan ini secara otomatis mendeteksi dan mengonfigurasi database di HP Anda ketika pertama kali dibuka.
+                      </p>
                     </div>
                   </div>
                 )}

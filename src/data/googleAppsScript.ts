@@ -1,9 +1,11 @@
 export const GOOGLE_APPS_SCRIPT_CODE = `function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Pastikan database dan sheet 'Admin' otomatis dibuat jika belum ada
+  // Pastikan seluruh sheet database ('DataTamu', 'Admin', 'Pengaturan') otomatis dibuat jika salah satu belum ada
+  var sheetTamu = ss.getSheetByName("DataTamu");
   var sheetAdmin = ss.getSheetByName("Admin");
-  if (!sheetAdmin) {
+  var sheetPengaturan = ss.getSheetByName("Pengaturan");
+  if (!sheetTamu || !sheetAdmin || !sheetPengaturan) {
     setupDatabase();
   }
   
@@ -197,16 +199,26 @@ function getDownloadUrl() {
 `;
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
-let inMemoryAppsScriptUrl = (import.meta as any).env?.VITE_APPS_SCRIPT_URL || "";
+// SCRIPT_URL_MARKER_START
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID/exec";
+// SCRIPT_URL_MARKER_END
 
-export const DEFAULT_APPS_SCRIPT_URL = 
-  (import.meta as any).env?.VITE_APPS_SCRIPT_URL || 
-  "https://script.google.com/macros/s/AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID/exec";
+let inMemoryAppsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
 
 export const getStoredAppsScriptUrl = (): string => {
   if (typeof window !== 'undefined') {
+    // Cek query parameter 'url' di address bar untuk auto-konfigurasi perangkat/browser baru
+    const searchParams = new URLSearchParams(window.location.search);
+    const urlParam = searchParams.get('url') || searchParams.get('script_url');
+    if (urlParam && urlParam.startsWith('https://script.google.com/') && urlParam.includes('/exec')) {
+      const decodedUrl = decodeURIComponent(urlParam.trim());
+      localStorage.setItem('smpn11palu_apps_script_url', decodedUrl);
+      inMemoryAppsScriptUrl = decodedUrl;
+      return decodedUrl;
+    }
+
     const saved = localStorage.getItem('smpn11palu_apps_script_url');
-    if (saved && saved.trim() !== '') return saved.trim();
+    if (saved && saved.trim() !== '' && !saved.includes('AKfycbx_SMPN11PALU_GOOGLE_APPS_SCRIPT_WEBAPP_ID')) return saved.trim();
   }
   return inMemoryAppsScriptUrl.trim();
 };
