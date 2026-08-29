@@ -16,7 +16,7 @@ async function startServer() {
   // API Route: Ambil URL database Google Sheets yang tersimpan di server
   app.get("/api/get-url", (req, res) => {
     try {
-      const configPath = path.join(__dirname, "src/data/config.json");
+      const configPath = path.join(process.cwd(), "src/data/config.json");
       if (fs.existsSync(configPath)) {
         const data = JSON.parse(fs.readFileSync(configPath, "utf-8"));
         if (data && data.appsScriptUrl) {
@@ -42,11 +42,11 @@ async function startServer() {
       const trimmedUrl = url.trim();
 
       // 1. Simpan ke src/data/config.json (Persistensi runtime server)
-      const configPath = path.join(__dirname, "src/data/config.json");
+      const configPath = path.join(process.cwd(), "src/data/config.json");
       fs.writeFileSync(configPath, JSON.stringify({ appsScriptUrl: trimmedUrl }, null, 2), "utf-8");
 
       // 2. Tulis ulang secara permanen ke src/data/googleAppsScript.ts agar terbawa saat rilis/build produksi
-      const scriptPath = path.join(__dirname, "src/data/googleAppsScript.ts");
+      const scriptPath = path.join(process.cwd(), "src/data/googleAppsScript.ts");
       if (fs.existsSync(scriptPath)) {
         let content = fs.readFileSync(scriptPath, "utf-8");
         const markerStart = "// SCRIPT_URL_MARKER_START";
@@ -76,7 +76,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, "dist");
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
