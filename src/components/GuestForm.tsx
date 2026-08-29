@@ -61,12 +61,12 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
       waktu: formattedDate,
     };
 
+    // Kirim data langsung ke Google Sheets secara pasti & instan (keberhasilan sinkronisasi jaringan HP)
+    sendGuestToGoogleSheets(newEntry);
+
     onAddGuest(newEntry);
     setSubmittedGuest(newEntry);
     setIsSubmitting(false);
-
-    // Kirim langsung ke Google Sheets secara pasti
-    await sendGuestToGoogleSheets(newEntry);
 
     // Reset form
     setFormData({

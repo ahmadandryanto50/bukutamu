@@ -401,7 +401,20 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
     const params = new URLSearchParams(payloadData);
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
-    // 1. Coba kirim via server proxy backend (jika running di Fullstack server Node.js)
+    const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
+
+    // 1. Send via navigator.sendBeacon (Dipertahankan 100% oleh sistem operasi HP iOS Safari/Android Chrome)
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([jsonBody], { type: 'text/plain;charset=UTF-8' });
+        navigator.sendBeacon(finalUrl, blob);
+        navigator.sendBeacon(getUrl);
+      } catch (e) {
+        // Ignore sendBeacon error
+      }
+    }
+
+    // 2. Coba kirim via server proxy backend (jika running di Fullstack server Node.js)
     const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
     fetch(proxyUrl, {
       method: 'POST',
@@ -409,9 +422,10 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(guest),
+      keepalive: true,
     }).catch(() => null);
 
-    // 2. Garansi 100% untuk Mobile Browser di Vercel/Static site: HTML Form submit ke hidden iframe
+    // 3. Garansi 100% untuk Mobile Browser di Vercel/Static site: HTML Form submit ke hidden iframe
     try {
       if (typeof document !== 'undefined') {
         let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
@@ -450,21 +464,23 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       console.warn('Hidden form submit warning:', e);
     }
 
-    // 3. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors')
+    // 4. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors' + keepalive)
     fetch(getUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: {
         'Content-Type': 'text/plain',
       },
-      body: JSON.stringify({ action: 'addGuest', ...guest }),
+      body: jsonBody,
+      keepalive: true,
     }).catch(() => null);
 
-    // 4. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter)
+    // 5. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter + keepalive)
     fetch(getUrl, {
       method: 'GET',
       mode: 'no-cors',
       cache: 'no-store',
+      keepalive: true,
     }).catch(() => null);
 
     // 5. Fallback persistent Image beacon ping (Tembus CORS & Webview Mobile Safari/Chrome tanpa GC)
