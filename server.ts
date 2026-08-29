@@ -132,7 +132,7 @@ async function startServer() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify({ action: "addGuest", ...req.body }),
       });
 
       res.json({ success: true });

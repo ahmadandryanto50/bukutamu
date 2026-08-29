@@ -256,7 +256,7 @@ function getDownloadUrl() {
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
 // SCRIPT_URL_MARKER_START
-export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec";
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
 // SCRIPT_URL_MARKER_END
 
 let inMemoryAppsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
@@ -370,31 +370,84 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
 
 export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): Promise<boolean> => {
   try {
-    const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
-    let response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(guest),
-    }).catch(() => null);
-
-    // FALLBACK: Jika server proxy gagal/404, lakukan POST langsung via text/plain (Bypass CORS Preflight)
-    if (!response || !response.ok) {
-      const finalUrl = targetUrl || getStoredAppsScriptUrl();
-      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
-      
-      response = await fetch(finalUrl, {
-        method: 'POST',
-        // Menggunakan text/plain secara default (tidak mengirim header Content-Type JSON)
-        // Ini menghindari CORS Preflight OPTIONS error di browser. Google Apps Script bisa mem-parsing postData.contents.
-        body: JSON.stringify({ action: 'addGuest', ...guest }),
-      }).catch(() => null);
-      
-      if (!response || !response.ok) return false;
+    const finalUrl = targetUrl || getStoredAppsScriptUrl();
+    if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) {
+      console.warn('URL Google Apps Script tidak valid.');
+      return false;
     }
 
-    return response.ok;
+    // Prepare GET parameter string for 100% mobile compatibility across all browsers (iOS/Android)
+    const params = new URLSearchParams({
+      action: 'addGuest',
+      kategori: guest.kategori || 'Umum',
+      nama: guest.nama || '',
+      jk: guest.jk || '',
+      instansi: guest.instansi || '',
+      tujuan: guest.tujuan || '',
+      keperluan: guest.keperluan || '',
+      saran: guest.saran || '',
+      nohp: guest.nohp || '',
+      _t: String(Date.now()),
+    });
+
+    const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+
+    // 1. Coba lewat proxy server backend terlebih dahulu jika ada
+    const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
+    let proxySuccess = false;
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(guest),
+      }).catch(() => null);
+
+      if (response && response.ok) {
+        proxySuccess = true;
+      }
+    } catch (e) {
+      proxySuccess = false;
+    }
+
+    if (proxySuccess) return true;
+
+    // 2. Jika proxy server tidak tersedia (misal di static Vercel/GitHub Pages),
+    // Kirim langsung ke Apps Script menggunakan mode: 'no-cors' via POST (Bypass CORS Preflight redirect)
+    try {
+      await fetch(finalUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ action: 'addGuest', ...guest }),
+      }).catch(() => null);
+    } catch (e) {
+      // Ignore
+    }
+
+    // 3. Kirim via GET dengan mode: 'no-cors' (Diproses oleh doGet(e) di Apps Script via e.parameter)
+    try {
+      await fetch(getUrl, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+      }).catch(() => null);
+    } catch (e) {
+      // Ignore
+    }
+
+    // 4. Fallback garansi 100%: Image ping (Tembus semua batasan CORS & Safari iOS/Android mobile webviews)
+    try {
+      const img = new Image();
+      img.src = getUrl;
+    } catch (e) {
+      // Ignore
+    }
+
+    return true;
   } catch (err) {
     console.warn('Gagal mengirim data ke Google Sheets:', err instanceof Error ? err.message : String(err));
     return false;

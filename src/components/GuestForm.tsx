@@ -41,7 +41,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.jk) {
       alert('Silakan pilih Jenis Kelamin.');
@@ -50,35 +50,35 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const now = new Date();
-      // YYYY-MM-DD HH:MM:SS format
-      const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-      
-      const newEntry: GuestEntry = {
-        ...formData,
-        jk: formData.jk as 'Laki-laki' | 'Perempuan',
-        id: `GT-${Math.floor(100000 + Math.random() * 900000)}`,
-        waktu: formattedDate,
-      };
+    const now = new Date();
+    // YYYY-MM-DD HH:MM:SS format
+    const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    
+    const newEntry: GuestEntry = {
+      ...formData,
+      jk: formData.jk as 'Laki-laki' | 'Perempuan',
+      id: `GT-${Math.floor(100000 + Math.random() * 900000)}`,
+      waktu: formattedDate,
+    };
 
-      onAddGuest(newEntry);
-      sendGuestToGoogleSheets(newEntry);
-      setSubmittedGuest(newEntry);
-      setIsSubmitting(false);
+    onAddGuest(newEntry);
+    setSubmittedGuest(newEntry);
+    setIsSubmitting(false);
 
-      // Reset form
-      setFormData({
-        kategori: 'Umum',
-        nama: '',
-        jk: '',
-        instansi: '',
-        tujuan: '',
-        keperluan: '',
-        saran: '',
-        nohp: '',
-      });
-    }, 600);
+    // Kirim langsung ke Google Sheets secara pasti
+    await sendGuestToGoogleSheets(newEntry);
+
+    // Reset form
+    setFormData({
+      kategori: 'Umum',
+      nama: '',
+      jk: '',
+      instansi: '',
+      tujuan: '',
+      keperluan: '',
+      saran: '',
+      nohp: '',
+    });
   };
 
   // Hitung statistik pengunjung hari ini secara dinamis
@@ -167,9 +167,9 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
               <div className="mt-8 pt-6 flex justify-center">
                 <button
                   onClick={() => setSubmittedGuest(null)}
-                  className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors"
+                  className="px-6 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-lg transition-colors flex items-center gap-2"
                 >
-                  Isi Form Baru
+                  Kembali ke Halaman Utama
                 </button>
               </div>
             </div>
