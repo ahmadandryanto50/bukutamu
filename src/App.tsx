@@ -47,10 +47,36 @@ export default function App() {
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        setGuests(remoteGuests);
-        try {
-          localStorage.setItem('smpn11palu_guests', JSON.stringify(remoteGuests));
-        } catch (e) {}
+        setGuests((prevLocal) => {
+          const remoteKeys = new Set<string>();
+          remoteGuests.forEach((g) => {
+            if (g.id) remoteKeys.add(g.id);
+            const nameKey = `${(g.nama || '').trim().toLowerCase()}_${(g.waktu || '').trim()}`;
+            remoteKeys.add(nameKey);
+          });
+
+          const combined = [...remoteGuests];
+
+          // Pertahankan data lokal yang baru dibuat dalam 5 menit terakhir yang belum masuk ke Google Sheets
+          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+          (prevLocal || []).forEach((localItem) => {
+            const nameKey = `${(localItem.nama || '').trim().toLowerCase()}_${(localItem.waktu || '').trim()}`;
+            const exists = remoteKeys.has(localItem.id) || remoteKeys.has(nameKey);
+            if (!exists) {
+              const itemTime = new Date(localItem.waktu).getTime();
+              const isRecent = !isNaN(itemTime) ? itemTime > fiveMinutesAgo : true;
+              if (isRecent) {
+                combined.push(localItem);
+              }
+            }
+          });
+
+          try {
+            localStorage.setItem('smpn11palu_guests', JSON.stringify(combined));
+          } catch (e) {}
+
+          return combined;
+        });
         setSyncStatus('success');
       } else {
         setSyncStatus('idle');
