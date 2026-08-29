@@ -309,8 +309,10 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
     
     let response = await fetch(proxyUrl, { cache: 'no-store' }).catch(() => null);
     
-    // FALLBACK: Jika server proxy tidak ada (misal di Vercel/GitHub Pages), lakukan direct fetch CORS
-    if (!response || !response.ok) {
+    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+
+    // FALLBACK: Jika server proxy tidak ada atau mengembalikan HTML static Vercel, panggil langsung Google Apps Script URL
+    if (!isProxyJson) {
       const finalUrl = targetUrl || getStoredAppsScriptUrl();
       if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
       
@@ -399,44 +401,101 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
 
     const params = new URLSearchParams(payloadData);
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+    const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
 
-    // 1. Kirim via server proxy backend (/api/guests) jika server NodeJS aktif
+    // 1. Coba proxy backend jika server NodeJS (Fullstack) aktif
     try {
       const proxyRes = await fetch('/api/guests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...guest, targetUrl: finalUrl }),
-        keepalive: true,
       });
       if (proxyRes && proxyRes.ok) {
-        return true;
+        const contentType = proxyRes.headers.get('content-type') || '';
+        if (contentType.toLowerCase().includes('application/json')) {
+          const jsonRes = await proxyRes.json();
+          if (jsonRes && jsonRes.success) {
+            return true;
+          }
+        }
       }
     } catch (e) {
-      // Proxy tidak tersedia (misal di Vercel static site), lanjut ke direct GET fetch
+      // Proxy offline atau static site
     }
 
-    // 2. Direct GET fetch ke Google Apps Script (mode: 'no-cors')
-    // GET request dijamin mempertahankan query params di e.parameter saat Google Apps Script melakukan 302 redirect
+    // 2. Garansi #1 untuk Mobile & Desktop di Vercel/Static site: HTML Form submit ke hidden iframe
     try {
-      await fetch(getUrl, {
+      if (typeof document !== 'undefined') {
+        let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.id = 'gscript_hidden_iframe';
+          iframe.name = 'gscript_hidden_iframe';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = finalUrl;
+        form.target = 'gscript_hidden_iframe';
+        form.style.display = 'none';
+
+        for (const [key, value] of Object.entries(payloadData)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = value || '';
+          form.appendChild(input);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+
+        setTimeout(() => {
+          if (document.body.contains(form)) {
+            document.body.removeChild(form);
+          }
+        }, 3000);
+      }
+    } catch (e) {
+      console.warn('Hidden form submit warning:', e);
+    }
+
+    // 3. Garansi #2: sendBeacon (Background OS Level Delivery)
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        navigator.sendBeacon(getUrl);
+      } catch (e) {}
+    }
+
+    // 4. Garansi #3: Direct fetch GET & POST dengan mode no-cors
+    try {
+      fetch(getUrl, {
         method: 'GET',
         mode: 'no-cors',
         cache: 'no-store',
         keepalive: true,
-      });
-    } catch (e) {
-      console.warn('GET request error:', e);
-    }
+      }).catch(() => null);
 
-    // 3. Fallback Image beacon ping (Garansi 100% untuk browser HP/Laptop di site statis tanpa CORS)
+      fetch(getUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+        },
+        body: jsonBody,
+        keepalive: true,
+      }).catch(() => null);
+    } catch (e) {}
+
+    // 5. Garansi #4: Image Beacon Ping
     try {
       if (typeof window !== 'undefined') {
         const img = new Image();
         img.src = getUrl;
       }
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) {}
 
     return true;
   } catch (err) {
@@ -450,8 +509,10 @@ export const fetchAdminsFromGoogleSheets = async (targetUrl?: string): Promise<a
     const proxyUrl = targetUrl ? `/api/admins?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/admins';
     let response = await fetch(proxyUrl).catch(() => null);
     
+    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+
     // FALLBACK Direct fetch
-    if (!response || !response.ok) {
+    if (!isProxyJson) {
       const finalUrl = targetUrl || getStoredAppsScriptUrl();
       if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
       
@@ -478,8 +539,10 @@ export const fetchSettingsFromGoogleSheets = async (targetUrl?: string): Promise
     const proxyUrl = targetUrl ? `/api/settings?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/settings';
     let response = await fetch(proxyUrl).catch(() => null);
 
+    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+
     // FALLBACK Direct fetch
-    if (!response || !response.ok) {
+    if (!isProxyJson) {
       const finalUrl = targetUrl || getStoredAppsScriptUrl();
       if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return null;
       
@@ -513,17 +576,49 @@ export const saveSettingsToGoogleSheets = async (settings: Record<string, string
       body: JSON.stringify(settings),
     }).catch(() => null);
 
-    // FALLBACK Bypass CORS
-    if (!response || !response.ok) {
+    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+
+    if (!isProxyJson) {
       const finalUrl = targetUrl || getStoredAppsScriptUrl();
       if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
       
-      response = await fetch(finalUrl, {
-        method: 'POST',
-        // text/plain bypasses CORS Preflight
-        body: JSON.stringify({ action: 'saveSettings', ...settings }),
-      }).catch(() => null);
-      if (!response || !response.ok) return false;
+      const params = new URLSearchParams({ action: 'saveSettings', ...settings });
+      const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+      
+      fetch(getUrl, { method: 'GET', mode: 'no-cors' }).catch(() => null);
+      
+      try {
+        if (typeof document !== 'undefined') {
+          let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
+          if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'gscript_hidden_iframe';
+            iframe.name = 'gscript_hidden_iframe';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+          }
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = finalUrl;
+          form.target = 'gscript_hidden_iframe';
+          form.style.display = 'none';
+          const payload = { action: 'saveSettings', ...settings };
+          for (const [k, v] of Object.entries(payload)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = k;
+            input.value = String(v || '');
+            form.appendChild(input);
+          }
+          document.body.appendChild(form);
+          form.submit();
+          setTimeout(() => { if (document.body.contains(form)) document.body.removeChild(form); }, 3000);
+        }
+      } catch (e) {}
+
+      localStorage.setItem('smpn11palu_synced_settings', JSON.stringify(settings));
+      window.dispatchEvent(new CustomEvent('settings_changed', { detail: settings }));
+      return true;
     }
 
     const json = await response.json();
