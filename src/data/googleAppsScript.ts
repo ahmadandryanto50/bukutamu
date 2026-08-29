@@ -256,8 +256,10 @@ function getDownloadUrl() {
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
 // SCRIPT_URL_MARKER_START
-export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec";
 // SCRIPT_URL_MARKER_END
+
+const OLD_DEPRECATED_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
 
 let inMemoryAppsScriptUrl = DEFAULT_APPS_SCRIPT_URL;
 
@@ -274,9 +276,15 @@ export const getStoredAppsScriptUrl = (): string => {
     }
 
     const saved = localStorage.getItem('smpn11palu_apps_script_url');
-    if (saved && saved.trim() !== '' && saved.startsWith('https://script.google.com/')) return saved.trim();
+    if (saved) {
+      if (saved.trim() === OLD_DEPRECATED_URL) {
+        localStorage.removeItem('smpn11palu_apps_script_url');
+      } else if (saved.trim() !== '' && saved.startsWith('https://script.google.com/')) {
+        return saved.trim();
+      }
+    }
   }
-  return (inMemoryAppsScriptUrl && inMemoryAppsScriptUrl.trim() !== '') ? inMemoryAppsScriptUrl.trim() : DEFAULT_APPS_SCRIPT_URL;
+  return DEFAULT_APPS_SCRIPT_URL;
 };
 
 export const setStoredAppsScriptUrl = (url: string): void => {
@@ -376,8 +384,7 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       return false;
     }
 
-    // Prepare GET parameter string for 100% mobile compatibility across all browsers (iOS/Android)
-    const params = new URLSearchParams({
+    const payloadData: Record<string, string> = {
       action: 'addGuest',
       kategori: guest.kategori || 'Umum',
       nama: guest.nama || '',
@@ -388,11 +395,13 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       saran: guest.saran || '',
       nohp: guest.nohp || '',
       _t: String(Date.now()),
-    });
+    };
 
+    // Prepare GET parameter string for 100% mobile compatibility across all browsers (iOS/Android)
+    const params = new URLSearchParams(payloadData);
     const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
-    // 1. Coba kirim via server proxy backend
+    // 1. Coba kirim via server proxy backend (jika running di Fullstack server Node.js)
     const proxyUrl = targetUrl ? `/api/guests?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests';
     fetch(proxyUrl, {
       method: 'POST',
@@ -402,7 +411,46 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       body: JSON.stringify(guest),
     }).catch(() => null);
 
-    // 2. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors')
+    // 2. Garansi 100% untuk Mobile Browser di Vercel/Static site: HTML Form submit ke hidden iframe
+    try {
+      if (typeof document !== 'undefined') {
+        let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.id = 'gscript_hidden_iframe';
+          iframe.name = 'gscript_hidden_iframe';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = getUrl;
+        form.target = 'gscript_hidden_iframe';
+        form.style.display = 'none';
+
+        for (const [key, value] of Object.entries(payloadData)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = value || '';
+          form.appendChild(input);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+
+        setTimeout(() => {
+          if (document.body.contains(form)) {
+            document.body.removeChild(form);
+          }
+        }, 3000);
+      }
+    } catch (e) {
+      console.warn('Hidden form submit warning:', e);
+    }
+
+    // 3. Kirim via POST dengan query params penuh ke Apps Script (mode: 'no-cors')
     fetch(getUrl, {
       method: 'POST',
       mode: 'no-cors',
@@ -412,17 +460,26 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       body: JSON.stringify({ action: 'addGuest', ...guest }),
     }).catch(() => null);
 
-    // 3. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter)
+    // 4. Kirim via GET langsung (Diproses oleh doGet(e) di Apps Script via e.parameter)
     fetch(getUrl, {
       method: 'GET',
       mode: 'no-cors',
       cache: 'no-store',
     }).catch(() => null);
 
-    // 4. Fallback garansi 100% HP/Mobile: Image beacon ping (Tembus CORS & Webview Mobile Safari/Chrome)
+    // 5. Fallback persistent Image beacon ping (Tembus CORS & Webview Mobile Safari/Chrome tanpa GC)
     try {
-      const img = new Image();
-      img.src = getUrl;
+      if (typeof window !== 'undefined') {
+        if (!(window as any)._gscriptPingImages) {
+          (window as any)._gscriptPingImages = [];
+        }
+        const img = new Image();
+        img.src = getUrl;
+        (window as any)._gscriptPingImages.push(img);
+        if ((window as any)._gscriptPingImages.length > 20) {
+          (window as any)._gscriptPingImages.shift();
+        }
+      }
     } catch (e) {
       // Ignore
     }

@@ -533,10 +533,12 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
           <div className="space-y-3 max-h-[310px] overflow-y-auto pr-1 custom-scrollbar">
             {recentVisits.length > 0 ? (
               recentVisits.map((visit, index) => {
-                const initials = visit.nama
-                  ? visit.nama.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+                const initials = (visit.nama && typeof visit.nama === 'string')
+                  ? (visit.nama.trim().split(/\s+/).filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'GT')
                   : 'GT';
-                const timeOnly = visit.waktu ? visit.waktu.split(' ')[1]?.substring(0, 5) : '--:--';
+                const timeOnly = (visit.waktu && typeof visit.waktu === 'string')
+                  ? ((visit.waktu.includes(' ') ? visit.waktu.split(' ')[1] : visit.waktu)?.substring(0, 5) || '--:--')
+                  : '--:--';
                 
                 // Highlight the newest addition
                 const isNewest = index === 0;

@@ -26,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [time, setTime] = useState<Date>(new Date());
   const [hasScriptUrl, setHasScriptUrl] = useState<boolean>(!!getStoredAppsScriptUrl());
   const [localSettings, setLocalSettings] = useState<AppSettings>(getStoredSettings());
+  const [logoError, setLogoError] = useState<boolean>(false);
 
   const settings = propSettings || localSettings;
 
@@ -56,23 +57,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Brand / Logo Section */}
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-900 shadow-lg shadow-blue-950/20 shrink-0 overflow-hidden p-1">
-              {settings.logo_url && settings.logo_url.startsWith('http') ? (
+              {settings.logo_url && settings.logo_url.startsWith('http') && !logoError ? (
                 <img 
                   src={settings.logo_url} 
                   className="w-full h-full object-contain" 
                   alt="School Logo" 
                   referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    // Fallback to School icon on error
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    const parent = e.currentTarget.parentElement;
-                    if (parent) {
-                      const fallback = document.createElement('span');
-                      fallback.className = "text-blue-900";
-                      fallback.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-school w-6 h-6"><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M14 22v-4a2 2 0 1 0-4 0v4"/><path d="m18 10 4 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8l4-2"/><path d="M18 5a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v5h12z"/><path d="M12 7h.01"/></svg>`;
-                      parent.appendChild(fallback);
-                    }
-                  }}
+                  onError={() => setLogoError(true)}
                 />
               ) : (
                 <School className="w-6 h-6" />

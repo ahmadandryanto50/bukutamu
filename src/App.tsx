@@ -82,11 +82,16 @@ export default function App() {
         }
         
         const savedLocal = localStorage.getItem('smpn11palu_apps_script_url') || '';
+        const OLD_DEPRECATED_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
+
+        if (savedLocal === OLD_DEPRECATED_URL) {
+          localStorage.removeItem('smpn11palu_apps_script_url');
+        }
         
         let finalUrl = serverUrl;
 
-        // Jika localStorage memiliki URL custom yang valid, utamakan URL custom tersebut
-        if (savedLocal && savedLocal.startsWith('https://script.google.com/')) {
+        // Jika localStorage memiliki URL custom yang valid (dan bukan URL lama yang rusak), utamakan URL tersebut
+        if (savedLocal && savedLocal !== OLD_DEPRECATED_URL && savedLocal.startsWith('https://script.google.com/')) {
           finalUrl = savedLocal;
           if (serverUrl !== savedLocal) {
             fetch('/api/save-url', {
@@ -98,7 +103,7 @@ export default function App() {
         }
 
         // Jika tidak ada URL di server maupun local, gunakan DEFAULT_APPS_SCRIPT_URL
-        if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) {
+        if (!finalUrl || finalUrl === OLD_DEPRECATED_URL || !finalUrl.startsWith('https://script.google.com/')) {
           finalUrl = DEFAULT_APPS_SCRIPT_URL;
         }
 
