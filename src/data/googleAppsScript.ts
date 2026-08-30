@@ -223,6 +223,26 @@ function submitData(formObject) {
   }
 
   var lastRow = sheet.getLastRow();
+  var namaInput = String(formObject.nama || "").trim();
+  var instansiInput = String(formObject.instansi || "").trim();
+  var tujuanInput = String(formObject.tujuan || "").trim();
+
+  // Proteksi Duplikasi Data (Anti-Duplicate Guard):
+  // Jika baris terakhir memiliki nama, instansi, dan tujuan yang sama persis, jangan gandakan baris
+  if (lastRow > 1) {
+    var lastValues = sheet.getRange(lastRow, 1, 1, 10).getValues()[0];
+    var lastNama = String(lastValues[3] || "").trim();
+    var lastInstansi = String(lastValues[5] || "").trim();
+    var lastTujuan = String(lastValues[6] || "").trim();
+    
+    if (namaInput !== "" && 
+        lastNama.toLowerCase() === namaInput.toLowerCase() && 
+        lastInstansi.toLowerCase() === instansiInput.toLowerCase() && 
+        lastTujuan.toLowerCase() === tujuanInput.toLowerCase()) {
+      return "Data sudah tercatat sebelumnya (Duplikasi dicegah).";
+    }
+  }
+
   var no = lastRow; 
   var tgl = Utilities.formatDate(new Date(), "Asia/Makassar", "dd/MM/yyyy HH:mm:ss");
 
@@ -230,10 +250,10 @@ function submitData(formObject) {
     no,
     tgl,
     formObject.kategori || "Umum",
-    formObject.nama || "",
+    namaInput,
     formObject.jk || "Laki-laki",
-    formObject.instansi || "-",
-    formObject.tujuan || "-",
+    instansiInput || "-",
+    tujuanInput || "-",
     formObject.keperluan || "-",
     formObject.saran || "",
     formObject.nohp || ""
@@ -464,20 +484,25 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       _t: String(Date.now()),
     };
 
-    const params = new URLSearchParams(payloadData);
-    const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
-    const jsonBody = JSON.stringify({ action: 'addGuest', ...guest });
-
-    // 1. Coba proxy backend secara cepat jika server fullstack aktif
-    fetch('/api/guests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...guest, targetUrl: finalUrl }),
-    }).catch(() => {});
-
-    // 2. Garansi #1: HTML Form Submit ke Hidden Iframe (Bypass 100% CORS di HP & Laptop)
+    // Jalur 1: Coba kirim via proxy server backend (1 kali pengiriman pasti & bersih)
+    let proxySucceeded = false;
     try {
-      if (typeof document !== 'undefined') {
+      const response = await fetch('/api/guests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...guest, targetUrl: finalUrl }),
+      });
+      if (response && response.ok) {
+        proxySucceeded = true;
+        return true;
+      }
+    } catch (e) {
+      proxySucceeded = false;
+    }
+
+    // Jalur 2: Hanya jika backend proxy tidak aktif/offline (misalnya static hosting), gunakan 1 metode fallback (Hidden Form POST)
+    if (!proxySucceeded && typeof document !== 'undefined') {
+      try {
         let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
         if (!iframe) {
           iframe = document.createElement('iframe');
@@ -509,45 +534,11 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
             document.body.removeChild(form);
           }
         }, 3000);
+        return true;
+      } catch (e) {
+        console.warn('Hidden form fallback warning:', e);
       }
-    } catch (e) {
-      console.warn('Hidden form submit warning:', e);
     }
-
-    // 3. Garansi #2: sendBeacon (OS Level Delivery di background)
-    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      try {
-        navigator.sendBeacon(getUrl);
-      } catch (e) {}
-    }
-
-    // 4. Garansi #3: Direct fetch GET & POST dengan mode no-cors
-    try {
-      fetch(getUrl, {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-store',
-        keepalive: true,
-      }).catch(() => null);
-
-      fetch(getUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=UTF-8',
-        },
-        body: jsonBody,
-        keepalive: true,
-      }).catch(() => null);
-    } catch (e) {}
-
-    // 5. Garansi #4: Image Beacon Ping (Oldest universal browser ping)
-    try {
-      if (typeof window !== 'undefined') {
-        const img = new Image();
-        img.src = getUrl;
-      }
-    } catch (e) {}
 
     return true;
   } catch (err) {

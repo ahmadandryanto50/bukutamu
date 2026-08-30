@@ -56,6 +56,8 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!formData.jk) {
       alert('Silakan pilih Jenis Kelamin.');
       return;

@@ -123,7 +123,7 @@ async function startServer() {
     }
   });
 
-  // Proxy Route: Kirim data tamu baru ke Google Sheets server-side
+  // Proxy Route: Kirim data tamu baru ke Google Sheets server-side (Tepat 1 kali kirim tanpa duplikasi)
   app.post("/api/guests", async (req, res) => {
     try {
       const url = req.body?.targetUrl || getSavedAppsScriptUrl(req);
@@ -148,24 +148,19 @@ async function startServer() {
       const params = new URLSearchParams(guestData);
       const fullUrl = url.includes('?') ? `${url}&${params.toString()}` : `${url}?${params.toString()}`;
 
-      let jsonRes: any = null;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      // 1. Coba GET request dengan parameter (Bypass CORS & survive 302 redirects)
-      let response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
+      // Kirim tepat SATU kali request via GET (URL Encoded) yang aman melewati Google 302 Redirect
+      const response = await fetch(fullUrl, { 
+        method: "GET",
+        signal: controller.signal 
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      let jsonRes: any = null;
       if (response && response.ok) {
         jsonRes = await response.json().catch(() => null);
-      }
-
-      // 2. Backup: Jika GET tidak mengembalikan message atau status sukses, coba POST method
-      if (!jsonRes || (jsonRes.status !== 'success' && !jsonRes.message)) {
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          body: JSON.stringify(guestData),
-        }).catch(() => null);
-        if (response && response.ok) {
-          jsonRes = await response.json().catch(() => null);
-        }
       }
 
       res.json({ success: true, result: jsonRes });
