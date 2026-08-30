@@ -92,13 +92,17 @@ function doGet(e) {
   
   // Endpoint untuk menambahkan tamu (fallback via GET jika doPost gagal)
   if (action === "addGuest") {
+    if (!e.parameter.nama) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Nama tamu tidak boleh kosong." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     var resultMsg = submitData(e.parameter);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
   // Endpoint untuk menghapus tamu
-  if (action === "deleteGuest") {
+  if (action === "deleteGuest" || action === "delete" || e.parameter.delete_id || e.parameter.delete_nama) {
     var resultMsg = deleteData(e.parameter);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -127,7 +131,7 @@ function doPost(e) {
   action = action || body.action || "";
 
   // 1. Aksi Hapus Tamu (Prioritas utama di doPost)
-  if (action === "deleteGuest") {
+  if (action === "deleteGuest" || action === "delete" || body.delete_id || body.delete_nama) {
     var deleteMsg = deleteData(body);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: deleteMsg }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -159,8 +163,12 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 3. Aksi Tambah Tamu (Hanya jika bukan aksi delete/settings)
-  if (action === "addGuest" || (body.nama && action !== "deleteGuest" && action !== "saveSettings" && action !== "getGuests")) {
+  // 3. Aksi Tambah Tamu (Hanya jika nama tersedia dan bukan aksi hapus)
+  if (action === "addGuest" || (body.nama && action !== "deleteGuest" && action !== "delete" && action !== "saveSettings" && !body.delete_id && !body.delete_nama)) {
+    if (!body.nama) {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Nama tamu tidak boleh kosong." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     var resultMsg = submitData(body);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -279,12 +287,14 @@ function deleteData(params) {
   var sheet = ss.getSheetByName("DataTamu");
   if (!sheet) return "Sheet DataTamu tidak ditemukan";
 
-  var targetId = String(params.id || "").trim();
-  var cleanId = targetId.replace("GT-", "").split("_")[0];
-  var targetNama = String(params.nama || "").trim().toLowerCase();
-  var targetWaktu = String(params.waktu || "").trim();
-  var targetInstansi = String(params.instansi || "").trim().toLowerCase();
-  var data = sheet.getDataRange().getValues();
+  var targetId = String(params.delete_id || params.id || "").trim();
+  var cleanId = targetId.replace(/GT-/i, "").split("_")[0].trim();
+  var targetNama = String(params.delete_nama || params.nama || "").trim().toLowerCase();
+  var targetWaktu = String(params.delete_waktu || params.waktu || "").trim();
+  var targetInstansi = String(params.delete_instansi || params.instansi || "").trim().toLowerCase();
+  
+  var data = sheet.getDataRange().getDisplayValues();
+  if (data.length <= 1) return "Tidak ada data tamu di sheet.";
 
   for (var i = data.length - 1; i >= 1; i--) {
     var rowNo = String(data[i][0] || "").trim();
@@ -293,17 +303,42 @@ function deleteData(params) {
     var rowNama = String(data[i][3] || "").trim().toLowerCase();
     var rowInstansi = String(data[i][5] || "").trim().toLowerCase();
 
-    var isIdMatch = targetId !== "" && (rowId === targetId || rowNo === targetId || rowNo === cleanId);
-    var isNameMatch = targetNama !== "" && rowNama === targetNama;
-    var isWaktuMatch = targetWaktu !== "" && (rowWaktu === targetWaktu || rowWaktu.includes(targetWaktu.slice(0, 10)));
-    var isInstansiMatch = targetInstansi !== "" && rowInstansi === targetInstansi;
+    var isIdMatch = cleanId !== "" && !isNaN(cleanId) && Number(cleanId) > 0 && Number(cleanId) < 50000 && (rowNo === cleanId || rowId.toLowerCase() === targetId.toLowerCase());
+    var isNameMatch = targetNama !== "" && (rowNama === targetNama || rowNama.indexOf(targetNama) !== -1 || targetNama.indexOf(rowNama) !== -1);
 
-    if (isIdMatch || (isNameMatch && (isWaktuMatch || isInstansiMatch || !targetWaktu))) {
+    var isWaktuMatch = false;
+    if (targetWaktu !== "" && rowWaktu !== "") {
+      var twDate = targetWaktu.split(" ")[0].trim();
+      var rwDate = rowWaktu.split(" ")[0].trim();
+      isWaktuMatch = (rowWaktu === targetWaktu || rwDate === twDate || rowWaktu.indexOf(twDate) !== -1);
+    }
+
+    var isInstansiMatch = targetInstansi !== "" && (rowInstansi === targetInstansi || rowInstansi.indexOf(targetInstansi) !== -1 || targetInstansi.indexOf(rowInstansi) !== -1);
+
+    if (isIdMatch && (isNameMatch || !targetNama)) {
       sheet.deleteRow(i + 1);
+      renumberGuestRows(sheet);
       return "Data tamu baris ke-" + (i + 1) + " terhapus!";
     }
+
+    if (isNameMatch && (isWaktuMatch || isInstansiMatch || (!targetWaktu && !targetInstansi))) {
+      sheet.deleteRow(i + 1);
+      renumberGuestRows(sheet);
+      return "Data tamu " + targetNama + " terhapus!";
+    }
   }
+
   return "Data tidak ditemukan untuk dihapus";
+}
+
+// Fungsi bantu untuk merapikan kembali penomoran kolom No setelah penghapusan
+function renumberGuestRows(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    for (var r = 2; r <= lastRow; r++) {
+      sheet.getRange(r, 1).setValue(r - 1);
+    }
+  }
 }
 
 // Fungsi verifikasi login Admin langsung dari Sheet 'Admin'

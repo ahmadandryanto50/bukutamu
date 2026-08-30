@@ -203,45 +203,47 @@ async function startServer() {
         return;
       }
 
-      const targetId = req.body?.id || '';
-      const targetNama = req.body?.nama || '';
-      const targetWaktu = req.body?.waktu || '';
-      const targetInstansi = req.body?.instansi || '';
+      const rawId = req.body?.id || req.body?.delete_id || '';
+      const targetId = String(rawId).trim();
+      const cleanNo = targetId.replace(/^GT-/i, '').split('_')[0].trim();
+      const targetNama = String(req.body?.nama || req.body?.delete_nama || '').trim();
+      const targetWaktu = String(req.body?.waktu || req.body?.delete_waktu || '').trim();
+      const targetInstansi = String(req.body?.instansi || req.body?.delete_instansi || '').trim();
 
+      // Parameter kompatibilitas penuh:
+      // - Mengirim id dan clean_id (agar cocok dengan skrip Apps Script versi manapun)
+      // - TIDAK mengirimkan key 'nama' biasa untuk menghindari terpicunya submitData pada skrip lama
+      // - Mengirimkan 'delete_nama', 'target_nama', 'delete_instansi', 'delete_waktu'
       const deleteParams = new URLSearchParams({
         action: 'deleteGuest',
         id: targetId,
-        nama: targetNama,
+        clean_id: cleanNo,
+        no: cleanNo,
+        delete_id: targetId,
+        delete_nama: targetNama,
+        target_nama: targetNama,
+        delete_waktu: targetWaktu,
         waktu: targetWaktu,
+        delete_instansi: targetInstansi,
         instansi: targetInstansi,
         _t: String(Date.now()),
       });
 
       const fullUrl = url.includes('?') ? `${url}&${deleteParams.toString()}` : `${url}?${deleteParams.toString()}`;
 
-      // Kirim via GET dengan URL Encoded parameter (aman dari 302 redirect Google)
-      let response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      // Kirim via GET ke Google Apps Script (menghindari redirect issue Google)
+      let response = await fetch(fullUrl, { 
+        method: "GET",
+        signal: controller.signal
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
       let jsonRes: any = null;
       if (response && response.ok) {
         jsonRes = await response.json().catch(() => null);
-      }
-
-      // Jika response belum berhasil, coba kirimkan via POST
-      if (!jsonRes || jsonRes.status !== 'success') {
-        const postRes = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          body: JSON.stringify({
-            action: 'deleteGuest',
-            id: targetId,
-            nama: targetNama,
-            waktu: targetWaktu,
-            instansi: targetInstansi,
-          }),
-        }).catch(() => null);
-        if (postRes && postRes.ok) {
-          jsonRes = await postRes.json().catch(() => null);
-        }
       }
 
       res.json({ success: true, result: jsonRes });
