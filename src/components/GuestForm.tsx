@@ -562,7 +562,7 @@ export const GuestForm: React.FC<GuestFormProps> = ({ onAddGuest, guests = [] })
 
                 return (
                   <div 
-                    key={visit.id} 
+                    key={`${visit.id || 'visit'}-${index}`} 
                     className={`p-3 rounded-2xl border transition-all duration-300 flex items-start gap-3 ${
                       isNewest 
                         ? 'bg-white/5 border-sky-500/40 shadow-md shadow-sky-500/5' 

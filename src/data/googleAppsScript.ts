@@ -11,6 +11,18 @@ export const GOOGLE_APPS_SCRIPT_CODE = `function doGet(e) {
   
   var action = e && e.parameter ? e.parameter.action : "";
   
+  // Jika diakses langsung tanpa parameter 'action', dan file 'index' (HTML) ada, tampilkan halaman UI (index.html)
+  if (!action && e && (!e.parameter || Object.keys(e.parameter).length === 0)) {
+    try {
+      return HtmlService.createHtmlOutputFromFile('index')
+        .setTitle('Buku Tamu Digital SMPN 11 Palu')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } catch (err) {
+      // Jika file index.html belum dibuat di Apps Script, kembalikan JSON data tamu sebagai fallback
+    }
+  }
+  
   // Endpoint untuk mengambil akun admin dari sheet 'Admin'
   if (action === "getAdmins") {
     var adminSheet = ss.getSheetByName("Admin");
@@ -81,6 +93,13 @@ export const GOOGLE_APPS_SCRIPT_CODE = `function doGet(e) {
   // Endpoint untuk menambahkan tamu (fallback via GET jika doPost gagal)
   if (action === "addGuest") {
     var resultMsg = submitData(e.parameter);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Endpoint untuk menghapus tamu
+  if (action === "deleteGuest") {
+    var resultMsg = deleteData(e.parameter);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -223,6 +242,29 @@ function submitData(formObject) {
   return "Data berhasil disimpan ke Google Sheets!";
 }
 
+// Fungsi untuk menghapus data berdasarkan ID atau Nama
+function deleteData(params) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("DataTamu");
+  if (!sheet) return "Sheet DataTamu tidak ditemukan";
+
+  var targetId = String(params.id || "").trim();
+  var targetNama = String(params.nama || "").trim().toLowerCase();
+  var data = sheet.getDataRange().getValues();
+
+  for (var i = data.length - 1; i >= 1; i--) {
+    var rowNo = String(data[i][0] || "").trim();
+    var rowId = "GT-" + rowNo;
+    var rowNama = String(data[i][3] || "").trim().toLowerCase();
+
+    if ((targetId && (rowId === targetId || rowNo === targetId)) || (targetNama && rowNama === targetNama)) {
+      sheet.deleteRow(i + 1);
+      return "Data tamu baris ke-" + (i + 1) + " terhapus!";
+    }
+  }
+  return "Data tidak ditemukan untuk dihapus";
+}
+
 // Fungsi verifikasi login Admin langsung dari Sheet 'Admin'
 function verifyAdmin(username, password) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -256,7 +298,7 @@ function getDownloadUrl() {
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
 // SCRIPT_URL_MARKER_START
-export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxxwQC6njPECwewLJtWpagWmi2uFLgJExDXRHy1wvGtvnAAWVZvEqMWFrorTLMeD-ZESg/exec";
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXRFfu8c-ndIcGjC05_W4b_OD8aMZDcGhkW0IbgocnLWuCg9M1nsMJU3trsw4LR90Btw/exec";
 // SCRIPT_URL_MARKER_END
 
 const OLD_DEPRECATED_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
@@ -336,6 +378,8 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
 
     // Transform 2D array or object list into GuestEntry[]
     const parsedGuests: any[] = [];
+    const seenIds = new Set<string>();
+
     rawRows.forEach((row: any, idx: number) => {
       if (Array.isArray(row)) {
         // Skip header row if present
@@ -343,8 +387,19 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
           return;
         }
         if (!row[3]) return; // empty name
+
+        const rawNo = String(row[0] || '').trim();
+        const baseId = rawNo ? (rawNo.startsWith('GT-') ? rawNo : `GT-${rawNo}`) : `GT-${100000 + idx}`;
+        let uniqueId = baseId;
+        let counter = 1;
+        while (seenIds.has(uniqueId)) {
+          uniqueId = `${baseId}_${counter}`;
+          counter++;
+        }
+        seenIds.add(uniqueId);
+
         parsedGuests.push({
-          id: `GT-${row[0] || (100000 + idx)}`,
+          id: uniqueId,
           waktu: row[1] || new Date().toLocaleString('id-ID'),
           kategori: row[2] === 'Khusus' ? 'Khusus' : 'Umum',
           nama: row[3] || 'Pengunjung',
@@ -356,8 +411,18 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
           nohp: row[9] || '',
         });
       } else if (typeof row === 'object' && row !== null) {
+        const rawId = String(row.id || row.No || '').trim();
+        const baseId = rawId ? (rawId.startsWith('GT-') ? rawId : `GT-${rawId}`) : `GT-${100000 + idx}`;
+        let uniqueId = baseId;
+        let counter = 1;
+        while (seenIds.has(uniqueId)) {
+          uniqueId = `${baseId}_${counter}`;
+          counter++;
+        }
+        seenIds.add(uniqueId);
+
         parsedGuests.push({
-          id: row.id || `GT-${100000 + idx}`,
+          id: uniqueId,
           waktu: row.waktu || row.tanggal || new Date().toLocaleString('id-ID'),
           kategori: row.kategori === 'Khusus' ? 'Khusus' : 'Umum',
           nama: row.nama || 'Pengunjung',
@@ -617,6 +682,33 @@ export const saveSettingsToGoogleSheets = async (settings: Record<string, string
     return false;
   } catch (err) {
     console.warn('Gagal menyimpan pengaturan ke Google Sheets:', err instanceof Error ? err.message : String(err));
+    return false;
+  }
+};
+
+export const deleteGuestFromGoogleSheets = async (guestId: string, guestNama?: string, targetUrl?: string): Promise<boolean> => {
+  try {
+    const proxyUrl = targetUrl ? `/api/guests/delete?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests/delete';
+    let response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: guestId, nama: guestNama }),
+    }).catch(() => null);
+
+    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+
+    if (!isProxyJson) {
+      const finalUrl = targetUrl || getStoredAppsScriptUrl();
+      if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
+
+      const params = new URLSearchParams({ action: 'deleteGuest', id: guestId, nama: guestNama || '' });
+      const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
+
+      fetch(getUrl, { method: 'GET', mode: 'no-cors' }).catch(() => null);
+    }
+    return true;
+  } catch (err) {
+    console.warn('Gagal menghapus data dari Google Sheets:', err);
     return false;
   }
 };

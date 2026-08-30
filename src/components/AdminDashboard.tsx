@@ -66,7 +66,8 @@ const parseGuestDate = (waktuStr: string | undefined): { year: number, month: nu
 interface AdminDashboardProps {
   guests: GuestEntry[];
   onRefresh: () => void;
-  onDeleteGuest: (id: string) => void;
+  onDeleteGuest: (id: string, nama?: string) => void;
+  onResetCache?: () => void;
   onLogout: () => void;
 }
 
@@ -74,6 +75,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   guests,
   onRefresh,
   onDeleteGuest,
+  onResetCache,
   onLogout,
 }) => {
   const [currentSubTab, setCurrentSubTab] = useState<'data' | 'recap' | 'settings'>('data');
@@ -823,8 +825,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredGuests.length > 0 ? (
-                    [...filteredGuests].reverse().map((guest) => (
-                      <tr key={guest.id} className="hover:bg-blue-50/40 transition-colors">
+                    [...filteredGuests].reverse().map((guest, idx) => (
+                      <tr key={`${guest.id || 'guest'}-${idx}`} className="hover:bg-blue-50/40 transition-colors">
                         <td className="px-6 py-4 font-mono text-xs text-slate-600">{guest.waktu}</td>
                         <td className="px-6 py-4">
                           <div className="font-bold text-slate-900">{guest.nama}</div>
@@ -849,7 +851,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => confirm(`Hapus data ${guest.nama}?`) && onDeleteGuest(guest.id)}
+                              onClick={() => confirm(`Hapus data ${guest.nama}?`) && onDeleteGuest(guest.id, guest.nama)}
                               className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                               title="Hapus"
                             >

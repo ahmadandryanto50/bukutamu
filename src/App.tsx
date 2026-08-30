@@ -4,7 +4,7 @@ import { Header } from './components/Header';
 import { GuestForm } from './components/GuestForm';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
-import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets, fetchAdminsFromGoogleSheets, DEFAULT_APPS_SCRIPT_URL } from './data/googleAppsScript';
+import { fetchGuestsFromGoogleSheets, getStoredAppsScriptUrl, setStoredAppsScriptUrl, fetchSettingsFromGoogleSheets, fetchAdminsFromGoogleSheets, DEFAULT_APPS_SCRIPT_URL, deleteGuestFromGoogleSheets } from './data/googleAppsScript';
 import { getStoredSettings, AppSettings } from './data/settings';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -26,12 +26,29 @@ export default function App() {
   // Menyimpan tamu lokal yang baru saja dibuat di sesi ini dalam 15 detik terakhir
   const recentLocalEntriesRef = useRef<Map<string, { guest: GuestEntry; timestamp: number }>>(new Map());
 
+  // Helper untuk menjamin semua ID guest bersifat unik (mencegah error React key collision)
+  const ensureUniqueGuestIds = (list: GuestEntry[]): GuestEntry[] => {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set<string>();
+    return list.map((guest, idx) => {
+      let baseId = guest.id || `GT-${100000 + idx}`;
+      let uniqueId = baseId;
+      let counter = 1;
+      while (seen.has(uniqueId)) {
+        uniqueId = `${baseId}_${counter}`;
+        counter++;
+      }
+      seen.add(uniqueId);
+      return { ...guest, id: uniqueId };
+    });
+  };
+
   const [guests, setGuests] = useState<GuestEntry[]>(() => {
     try {
       const saved = localStorage.getItem('smpn11palu_guests');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return ensureUniqueGuestIds(parsed);
       }
     } catch (err) {
       console.error('Failed to parse saved guests:', err);
@@ -72,9 +89,10 @@ export default function App() {
           }
         });
 
-        setGuests(updatedList);
+        const sanitizedList = ensureUniqueGuestIds(updatedList);
+        setGuests(sanitizedList);
         try {
-          localStorage.setItem('smpn11palu_guests', JSON.stringify(updatedList));
+          localStorage.setItem('smpn11palu_guests', JSON.stringify(sanitizedList));
         } catch (e) {}
 
         setSyncStatus('success');
@@ -208,8 +226,11 @@ export default function App() {
     }, 2500);
   };
 
-  const handleDeleteGuest = (id: string) => {
+  const handleDeleteGuest = (id: string, nama?: string) => {
     recentLocalEntriesRef.current.delete(id);
+    const targetGuest = guests.find((g) => g.id === id);
+    const targetNama = nama || targetGuest?.nama || '';
+
     setGuests((prev) => {
       const nextList = prev.filter((g) => g.id !== id);
       try {
@@ -217,6 +238,22 @@ export default function App() {
       } catch (e) {}
       return nextList;
     });
+
+    // Kirim sinyal hapus ke Google Sheets secara asinkron
+    deleteGuestFromGoogleSheets(id, targetNama).then(() => {
+      setTimeout(() => {
+        syncGuestsWithGoogleSheets();
+      }, 2000);
+    });
+  };
+
+  const handleResetCache = async () => {
+    recentLocalEntriesRef.current.clear();
+    try {
+      localStorage.removeItem('smpn11palu_guests');
+    } catch (e) {}
+    setGuests([]);
+    await syncGuestsWithGoogleSheets();
   };
 
   const handleRefreshGuests = async () => {
@@ -264,6 +301,7 @@ export default function App() {
                   guests={guests}
                   onRefresh={handleRefreshGuests}
                   onDeleteGuest={handleDeleteGuest}
+                  onResetCache={handleResetCache}
                   onLogout={() => {
                     setIsLoggedIn(false);
                     localStorage.removeItem('smpn11palu_admin_logged');
