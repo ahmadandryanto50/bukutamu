@@ -203,20 +203,47 @@ async function startServer() {
         return;
       }
 
+      const targetId = req.body?.id || '';
+      const targetNama = req.body?.nama || '';
+      const targetWaktu = req.body?.waktu || '';
+      const targetInstansi = req.body?.instansi || '';
+
       const deleteParams = new URLSearchParams({
         action: 'deleteGuest',
-        id: req.body?.id || '',
-        nama: req.body?.nama || '',
+        id: targetId,
+        nama: targetNama,
+        waktu: targetWaktu,
+        instansi: targetInstansi,
         _t: String(Date.now()),
       });
 
       const fullUrl = url.includes('?') ? `${url}&${deleteParams.toString()}` : `${url}?${deleteParams.toString()}`;
 
+      // Kirim via GET dengan URL Encoded parameter (aman dari 302 redirect Google)
       let response = await fetch(fullUrl, { method: "GET" }).catch(() => null);
       let jsonRes: any = null;
       if (response && response.ok) {
         jsonRes = await response.json().catch(() => null);
       }
+
+      // Jika response belum berhasil, coba kirimkan via POST
+      if (!jsonRes || jsonRes.status !== 'success') {
+        const postRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=UTF-8" },
+          body: JSON.stringify({
+            action: 'deleteGuest',
+            id: targetId,
+            nama: targetNama,
+            waktu: targetWaktu,
+            instansi: targetInstansi,
+          }),
+        }).catch(() => null);
+        if (postRes && postRes.ok) {
+          jsonRes = await postRes.json().catch(() => null);
+        }
+      }
+
       res.json({ success: true, result: jsonRes });
     } catch (error) {
       res.status(500).json({ success: false, error: (error as any).message });

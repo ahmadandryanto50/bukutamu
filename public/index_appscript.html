@@ -762,7 +762,7 @@
                 <button onclick='viewGuestDetail(${JSON.stringify(row)})' class="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition" title="Lihat Detail">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </button>
-                <button onclick="deleteGuestRow('${row[0]}', '${row[3]}')" class="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition" title="Hapus Data">
+                <button onclick="deleteGuestRow('${row[0]}', '${row[3]}', '${row[1] || ''}', '${row[5] || ''}')" class="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition" title="Hapus Data">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </div>
@@ -790,12 +790,13 @@
     function closeDetailModal() { document.getElementById('guest-detail-modal').classList.add('hidden'); }
 
     // Hapus Tamu
-    function deleteGuestRow(id, nama) {
+    function deleteGuestRow(id, nama, waktu, instansi) {
       if (!confirm('Apakah Anda yakin ingin menghapus data kunjungan ' + nama + '?')) return;
+      const payload = { id: id, nama: nama, waktu: waktu || '', instansi: instansi || '' };
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(refreshData).deleteData({ id: id, nama: nama });
+        google.script.run.withSuccessHandler(refreshData).deleteData(payload);
       } else {
-        fetch(window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'action=deleteGuest&id=' + encodeURIComponent(id) + '&nama=' + encodeURIComponent(nama))
+        fetch(window.location.href + (window.location.href.includes('?') ? '&' : '?') + 'action=deleteGuest&id=' + encodeURIComponent(id) + '&nama=' + encodeURIComponent(nama) + '&waktu=' + encodeURIComponent(waktu || '') + '&instansi=' + encodeURIComponent(instansi || ''))
           .then(() => refreshData());
       }
     }

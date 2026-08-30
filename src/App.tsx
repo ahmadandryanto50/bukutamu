@@ -25,6 +25,8 @@ export default function App() {
 
   // Menyimpan tamu lokal yang baru saja dibuat di sesi ini dalam 15 detik terakhir
   const recentLocalEntriesRef = useRef<Map<string, { guest: GuestEntry; timestamp: number }>>(new Map());
+  // Menyimpan ID dan nama tamu yang baru dihapus agar tidak ditarik kembali saat proses hapus di Google Sheets sedang berlangsung
+  const deletedGuestSignaturesRef = useRef<Map<string, number>>(new Map());
 
   // Helper untuk menjamin semua ID guest bersifat unik (mencegah error React key collision)
   const ensureUniqueGuestIds = (list: GuestEntry[]): GuestEntry[] => {
@@ -68,14 +70,30 @@ export default function App() {
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        // Google Sheets adalah SINGLE SOURCE OF TRUTH
+        const now = Date.now();
+
+        // Bersihkan data hapus lokal yang usianya sudah lebih dari 30 detik
+        deletedGuestSignaturesRef.current.forEach((timestamp, key) => {
+          if (now - timestamp > 30000) {
+            deletedGuestSignaturesRef.current.delete(key);
+          }
+        });
+
+        // Saring data remote agar tidak memunculkan data yang baru saja dihapus oleh admin
+        const activeRemoteGuests = remoteGuests.filter((g) => {
+          const nameInstKey = `${(g.nama || '').trim().toLowerCase()}_${(g.instansi || '').trim().toLowerCase()}`;
+          if (deletedGuestSignaturesRef.current.has(nameInstKey) || deletedGuestSignaturesRef.current.has(g.id)) {
+            return false;
+          }
+          return true;
+        });
+
         // Buat daftar nama+instansi yang sudah ada di remote
         const remoteNames = new Set(
-          remoteGuests.map((g) => `${(g.nama || '').trim().toLowerCase()}_${(g.instansi || '').trim().toLowerCase()}`)
+          activeRemoteGuests.map((g) => `${(g.nama || '').trim().toLowerCase()}_${(g.instansi || '').trim().toLowerCase()}`)
         );
 
-        const updatedList = [...remoteGuests];
-        const now = Date.now();
+        const updatedList = [...activeRemoteGuests];
 
         // Bersihkan recentLocalEntries yang sudah berhasil masuk ke Google Sheets
         recentLocalEntriesRef.current.forEach((val, keyId) => {
@@ -83,8 +101,10 @@ export default function App() {
           if (remoteNames.has(localKey) || (now - val.timestamp > 15000)) {
             recentLocalEntriesRef.current.delete(keyId);
           } else {
-            // Hanya masukkan jika belum ada di remote list
-            updatedList.push(val.guest);
+            // Hanya masukkan jika belum dihapus
+            if (!deletedGuestSignaturesRef.current.has(localKey) && !deletedGuestSignaturesRef.current.has(keyId)) {
+              updatedList.push(val.guest);
+            }
           }
         });
 
@@ -237,13 +257,32 @@ export default function App() {
     }, 2500);
   };
 
-  const handleDeleteGuest = (id: string, nama?: string) => {
+  const handleDeleteGuest = async (id: string, nama?: string, extra?: { waktu?: string; instansi?: string }) => {
     recentLocalEntriesRef.current.delete(id);
     const targetGuest = guests.find((g) => g.id === id);
-    const targetNama = nama || targetGuest?.nama || '';
+    const targetNama = (nama || targetGuest?.nama || '').trim();
+    const targetWaktu = extra?.waktu || targetGuest?.waktu || '';
+    const targetInstansi = (extra?.instansi || targetGuest?.instansi || '').trim();
+
+    const nameInstKey = `${targetNama.toLowerCase()}_${targetInstansi.toLowerCase()}`;
+    const now = Date.now();
+
+    if (nameInstKey !== "_") {
+      deletedGuestSignaturesRef.current.set(nameInstKey, now);
+    }
+    deletedGuestSignaturesRef.current.set(id, now);
 
     setGuests((prev) => {
-      const nextList = prev.filter((g) => g.id !== id);
+      const nextList = prev.filter((g) => {
+        if (g.id === id) return false;
+        if (targetNama && targetInstansi && 
+            (g.nama || '').trim().toLowerCase() === targetNama.toLowerCase() && 
+            (g.instansi || '').trim().toLowerCase() === targetInstansi.toLowerCase() &&
+            (targetWaktu ? (g.waktu || '').slice(0, 16) === targetWaktu.slice(0, 16) : true)) {
+          return false;
+        }
+        return true;
+      });
       try {
         localStorage.setItem('smpn11palu_guests', JSON.stringify(nextList));
       } catch (e) {}
@@ -251,11 +290,12 @@ export default function App() {
     });
 
     // Kirim sinyal hapus ke Google Sheets secara asinkron
-    deleteGuestFromGoogleSheets(id, targetNama).then(() => {
-      setTimeout(() => {
-        syncGuestsWithGoogleSheets();
-      }, 2000);
-    });
+    await deleteGuestFromGoogleSheets(id, targetNama, { waktu: targetWaktu, instansi: targetInstansi });
+
+    // Otomatis sinkronkan ulang setelah beberapa saat
+    setTimeout(() => {
+      syncGuestsWithGoogleSheets();
+    }, 2000);
   };
 
   const handleResetCache = async () => {

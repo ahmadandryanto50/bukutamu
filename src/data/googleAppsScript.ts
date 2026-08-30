@@ -126,6 +126,14 @@ function doPost(e) {
   }
   action = action || body.action || "";
 
+  // 1. Aksi Hapus Tamu (Prioritas utama di doPost)
+  if (action === "deleteGuest") {
+    var deleteMsg = deleteData(body);
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: deleteMsg }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 2. Aksi Simpan Pengaturan
   if (action === "saveSettings") {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheetPengaturan = ss.getSheetByName("Pengaturan");
@@ -151,7 +159,8 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  if (action === "addGuest" || body.nama) {
+  // 3. Aksi Tambah Tamu (Hanya jika bukan aksi delete/settings)
+  if (action === "addGuest" || (body.nama && action !== "deleteGuest" && action !== "saveSettings" && action !== "getGuests")) {
     var resultMsg = submitData(body);
     return ContentService.createTextOutput(JSON.stringify({ status: "success", message: resultMsg }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -265,22 +274,32 @@ function submitData(formObject) {
   return "Data berhasil disimpan ke Google Sheets!";
 }
 
-// Fungsi untuk menghapus data berdasarkan ID atau Nama
+// Fungsi untuk menghapus data berdasarkan ID, Nama, atau Waktu
 function deleteData(params) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("DataTamu");
   if (!sheet) return "Sheet DataTamu tidak ditemukan";
 
   var targetId = String(params.id || "").trim();
+  var cleanId = targetId.replace("GT-", "").split("_")[0];
   var targetNama = String(params.nama || "").trim().toLowerCase();
+  var targetWaktu = String(params.waktu || "").trim();
+  var targetInstansi = String(params.instansi || "").trim().toLowerCase();
   var data = sheet.getDataRange().getValues();
 
   for (var i = data.length - 1; i >= 1; i--) {
     var rowNo = String(data[i][0] || "").trim();
     var rowId = "GT-" + rowNo;
+    var rowWaktu = String(data[i][1] || "").trim();
     var rowNama = String(data[i][3] || "").trim().toLowerCase();
+    var rowInstansi = String(data[i][5] || "").trim().toLowerCase();
 
-    if ((targetId && (rowId === targetId || rowNo === targetId)) || (targetNama && rowNama === targetNama)) {
+    var isIdMatch = targetId !== "" && (rowId === targetId || rowNo === targetId || rowNo === cleanId);
+    var isNameMatch = targetNama !== "" && rowNama === targetNama;
+    var isWaktuMatch = targetWaktu !== "" && (rowWaktu === targetWaktu || rowWaktu.includes(targetWaktu.slice(0, 10)));
+    var isInstansiMatch = targetInstansi !== "" && rowInstansi === targetInstansi;
+
+    if (isIdMatch || (isNameMatch && (isWaktuMatch || isInstansiMatch || !targetWaktu))) {
       sheet.deleteRow(i + 1);
       return "Data tamu baris ke-" + (i + 1) + " terhapus!";
     }
@@ -692,22 +711,50 @@ export const saveSettingsToGoogleSheets = async (settings: Record<string, string
   }
 };
 
-export const deleteGuestFromGoogleSheets = async (guestId: string, guestNama?: string, targetUrl?: string): Promise<boolean> => {
+export const deleteGuestFromGoogleSheets = async (
+  guestId: string, 
+  guestNama?: string, 
+  extra?: { waktu?: string; instansi?: string },
+  targetUrl?: string
+): Promise<boolean> => {
   try {
-    const proxyUrl = targetUrl ? `/api/guests/delete?targetUrl=${encodeURIComponent(targetUrl)}` : '/api/guests/delete';
-    let response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: guestId, nama: guestNama }),
-    }).catch(() => null);
+    const payload = {
+      action: 'deleteGuest',
+      id: guestId,
+      nama: guestNama || '',
+      waktu: extra?.waktu || '',
+      instansi: extra?.instansi || '',
+      targetUrl: targetUrl || '',
+    };
 
-    const isProxyJson = response && response.ok && (response.headers.get('content-type') || '').toLowerCase().includes('application/json');
+    let proxySucceeded = false;
+    try {
+      const response = await fetch('/api/guests/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (response && response.ok) {
+        proxySucceeded = true;
+        return true;
+      }
+    } catch (e) {
+      proxySucceeded = false;
+    }
 
-    if (!isProxyJson) {
+    // Direct Fallback jika backend proxy offline
+    if (!proxySucceeded) {
       const finalUrl = targetUrl || getStoredAppsScriptUrl();
       if (!finalUrl || !finalUrl.startsWith('https://script.google.com/')) return false;
 
-      const params = new URLSearchParams({ action: 'deleteGuest', id: guestId, nama: guestNama || '' });
+      const params = new URLSearchParams({
+        action: 'deleteGuest',
+        id: guestId,
+        nama: guestNama || '',
+        waktu: extra?.waktu || '',
+        instansi: extra?.instansi || '',
+        _t: String(Date.now()),
+      });
       const getUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}${params.toString()}`;
 
       fetch(getUrl, { method: 'GET', mode: 'no-cors' }).catch(() => null);

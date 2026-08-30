@@ -66,7 +66,7 @@ const parseGuestDate = (waktuStr: string | undefined): { year: number, month: nu
 interface AdminDashboardProps {
   guests: GuestEntry[];
   onRefresh: () => void;
-  onDeleteGuest: (id: string, nama?: string) => void;
+  onDeleteGuest: (id: string, nama?: string, extra?: { waktu?: string; instansi?: string }) => void;
   onResetCache?: () => void;
   onLogout: () => void;
 }
@@ -91,6 +91,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedGuest, setSelectedGuest] = useState<GuestEntry | null>(null);
+  const [guestToDelete, setGuestToDelete] = useState<GuestEntry | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteToast, setDeleteToast] = useState<string | null>(null);
   const [showScriptModal, setShowScriptModal] = useState(false);
   const [activeModalTab, setActiveModalTab] = useState<'script' | 'url' | 'vercel'>('url');
   const [isCopied, setIsCopied] = useState(false);
@@ -851,9 +854,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => confirm(`Hapus data ${guest.nama}?`) && onDeleteGuest(guest.id, guest.nama)}
+                              onClick={() => setGuestToDelete(guest)}
                               className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                              title="Hapus"
+                              title="Hapus Data"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1175,6 +1178,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </tbody>
                     </table>
                   </div>
+
+                  <div className="pt-2 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGuestToDelete(selectedGuest)}
+                      className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition-colors flex items-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Hapus Tamu</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedGuest(null)}
+                      className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors"
+                    >
+                      Tutup
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1445,6 +1466,101 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </motion.div>
           </div>
+        )}
+
+        {/* Modal Konfirmasi Hapus Data Tamu */}
+        {guestToDelete && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeleting && setGuestToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 overflow-hidden z-10"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-4 mx-auto border border-red-100 shadow-sm">
+                <Trash2 className="w-7 h-7" />
+              </div>
+              
+              <h3 className="text-lg font-bold text-slate-900 text-center mb-1">
+                Konfirmasi Hapus Data Tamu
+              </h3>
+              
+              <p className="text-sm text-slate-600 text-center mb-5 leading-relaxed">
+                Apakah Anda yakin ingin menghapus data kunjungan dari <strong className="text-slate-900">{guestToDelete.nama}</strong> ({guestToDelete.instansi || 'Umum'})?
+                <br />
+                <span className="text-xs text-red-500 font-medium mt-1.5 block">
+                  Data akan dihapus dari daftar aplikasi dan Google Sheets.
+                </span>
+              </p>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setGuestToDelete(null)}
+                  className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    setIsDeleting(true);
+                    const target = guestToDelete;
+                    try {
+                      await onDeleteGuest(target.id, target.nama, { waktu: target.waktu, instansi: target.instansi });
+                      if (selectedGuest && (selectedGuest.id === target.id || selectedGuest.nama === target.nama)) {
+                        setSelectedGuest(null);
+                      }
+                      setDeleteToast(`Data kunjungan ${target.nama} berhasil dihapus.`);
+                      setTimeout(() => setDeleteToast(null), 3500);
+                    } catch (err) {
+                      console.warn('Gagal memproses penghapusan:', err);
+                    } finally {
+                      setIsDeleting(false);
+                      setGuestToDelete(null);
+                    }
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-red-600/25 disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Menghapus...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Ya, Hapus Data</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Notifikasi Toast Sukses Hapus */}
+        {deleteToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-6 right-6 z-[130] bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 text-xs font-semibold"
+          >
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <Check className="w-3.5 h-3.5" />
+            </div>
+            <span>{deleteToast}</span>
+          </motion.div>
         )}
 
       </AnimatePresence>
