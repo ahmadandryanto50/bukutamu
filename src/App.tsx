@@ -68,28 +68,39 @@ export default function App() {
     try {
       const remoteGuests = await fetchGuestsFromGoogleSheets(url);
       if (remoteGuests !== null && Array.isArray(remoteGuests)) {
-        // Google Sheets adalah SINGLE SOURCE OF TRUTH (Sumber Kebenaran Tunggal Database)
-        const remoteIds = new Set(remoteGuests.map((g) => g.id));
-        const remoteNameKeys = new Set(
-          remoteGuests.map((g) => `${(g.nama || '').trim().toLowerCase()}_${(g.waktu || '').trim()}`)
+        // Google Sheets adalah SINGLE SOURCE OF TRUTH
+        // Buat daftar nama+instansi yang sudah ada di remote
+        const remoteNames = new Set(
+          remoteGuests.map((g) => `${(g.nama || '').trim().toLowerCase()}_${(g.instansi || '').trim().toLowerCase()}`)
         );
 
         const updatedList = [...remoteGuests];
         const now = Date.now();
 
-        // Gabungkan hanya inputan yang baru dilakukan di HP/browser ini dalam 15 detik terakhir yang belum sempat diproses oleh Google Apps Script
+        // Bersihkan recentLocalEntries yang sudah berhasil masuk ke Google Sheets
         recentLocalEntriesRef.current.forEach((val, keyId) => {
-          if (now - val.timestamp < 15000) {
-            const nameKey = `${(val.guest.nama || '').trim().toLowerCase()}_${(val.guest.waktu || '').trim()}`;
-            if (!remoteIds.has(keyId) && !remoteNameKeys.has(nameKey)) {
-              updatedList.push(val.guest);
-            }
-          } else {
+          const localKey = `${(val.guest.nama || '').trim().toLowerCase()}_${(val.guest.instansi || '').trim().toLowerCase()}`;
+          if (remoteNames.has(localKey) || (now - val.timestamp > 15000)) {
             recentLocalEntriesRef.current.delete(keyId);
+          } else {
+            // Hanya masukkan jika belum ada di remote list
+            updatedList.push(val.guest);
           }
         });
 
-        const sanitizedList = ensureUniqueGuestIds(updatedList);
+        // Anti-duplikasi cerdas pada tampilan UI: Hapus baris yang identik (nama, instansi, tujuan) yang terulang beruntun
+        const deduplicatedList: GuestEntry[] = [];
+        const seenSignatures = new Set<string>();
+
+        updatedList.forEach((entry) => {
+          const sig = `${(entry.nama || '').trim().toLowerCase()}_${(entry.instansi || '').trim().toLowerCase()}_${(entry.tujuan || '').trim().toLowerCase()}_${(entry.waktu || '').slice(0, 16)}`;
+          if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            deduplicatedList.push(entry);
+          }
+        });
+
+        const sanitizedList = ensureUniqueGuestIds(deduplicatedList);
         setGuests(sanitizedList);
         try {
           localStorage.setItem('smpn11palu_guests', JSON.stringify(sanitizedList));

@@ -123,6 +123,17 @@ async function startServer() {
     }
   });
 
+  // In-memory cache untuk mencegah multiple duplicate submit ke Google Sheets
+  const recentServerSubmissions = new Map<string, number>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, time] of recentServerSubmissions.entries()) {
+      if (now - time > 30000) {
+        recentServerSubmissions.delete(key);
+      }
+    }
+  }, 20000);
+
   // Proxy Route: Kirim data tamu baru ke Google Sheets server-side (Tepat 1 kali kirim tanpa duplikasi)
   app.post("/api/guests", async (req, res) => {
     try {
@@ -145,11 +156,25 @@ async function startServer() {
         _t: String(Date.now()),
       };
 
+      // Kunci unik berdasarkan nama, instansi, dan tujuan
+      const subKey = `${String(guestData.nama).trim().toLowerCase()}_${String(guestData.instansi).trim().toLowerCase()}_${String(guestData.tujuan).trim().toLowerCase()}`;
+      const now = Date.now();
+
+      // Jika request yang sama persis diterima dalam 10 detik terakhir, tanggapi sukses tanpa meneruskan ulang ke Google Sheets
+      if (subKey !== "__" && recentServerSubmissions.has(subKey) && (now - (recentServerSubmissions.get(subKey) || 0)) < 10000) {
+        console.log(`[Anti-Duplikasi] Mencegah pengiriman ganda untuk: ${subKey}`);
+        res.json({ success: true, duplicated: true, message: "Data sudah diproses (Duplikasi dicegah)." });
+        return;
+      }
+      if (subKey !== "__") {
+        recentServerSubmissions.set(subKey, now);
+      }
+
       const params = new URLSearchParams(guestData);
       const fullUrl = url.includes('?') ? `${url}&${params.toString()}` : `${url}?${params.toString()}`;
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       // Kirim tepat SATU kali request via GET (URL Encoded) yang aman melewati Google 302 Redirect
       const response = await fetch(fullUrl, { 

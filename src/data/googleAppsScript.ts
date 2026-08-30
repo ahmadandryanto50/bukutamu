@@ -228,18 +228,21 @@ function submitData(formObject) {
   var tujuanInput = String(formObject.tujuan || "").trim();
 
   // Proteksi Duplikasi Data (Anti-Duplicate Guard):
-  // Jika baris terakhir memiliki nama, instansi, dan tujuan yang sama persis, jangan gandakan baris
+  // Periksa apakah nama, instansi, dan tujuan yang sama persis sudah masuk dalam 5 baris terakhir
   if (lastRow > 1) {
-    var lastValues = sheet.getRange(lastRow, 1, 1, 10).getValues()[0];
-    var lastNama = String(lastValues[3] || "").trim();
-    var lastInstansi = String(lastValues[5] || "").trim();
-    var lastTujuan = String(lastValues[6] || "").trim();
-    
-    if (namaInput !== "" && 
-        lastNama.toLowerCase() === namaInput.toLowerCase() && 
-        lastInstansi.toLowerCase() === instansiInput.toLowerCase() && 
-        lastTujuan.toLowerCase() === tujuanInput.toLowerCase()) {
-      return "Data sudah tercatat sebelumnya (Duplikasi dicegah).";
+    var checkRows = Math.min(5, lastRow - 1);
+    var startRow = lastRow - checkRows + 1;
+    var recentValues = sheet.getRange(startRow, 1, checkRows, 10).getValues();
+    for (var r = 0; r < recentValues.length; r++) {
+      var rNama = String(recentValues[r][3] || "").trim().toLowerCase();
+      var rInstansi = String(recentValues[r][5] || "").trim().toLowerCase();
+      var rTujuan = String(recentValues[r][6] || "").trim().toLowerCase();
+      if (namaInput !== "" && 
+          rNama === namaInput.toLowerCase() && 
+          rInstansi === instansiInput.toLowerCase() && 
+          rTujuan === tujuanInput.toLowerCase()) {
+        return "Data sudah tercatat sebelumnya (Duplikasi dicegah).";
+      }
     }
   }
 
@@ -318,7 +321,7 @@ function getDownloadUrl() {
 
 // Default global Apps Script Web App URL fallback (agar saat dipublikasikan, semua laptop & HP langsung tersinkron tanpa perlu isi URL lagi)
 // SCRIPT_URL_MARKER_START
-export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXRFfu8c-ndIcGjC05_W4b_OD8aMZDcGhkW0IbgocnLWuCg9M1nsMJU3trsw4LR90Btw/exec";
+export const DEFAULT_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyCx4hXh2JpF88VM4CEyHxZ6XJtxT8zPAEMjO_FCXm53YCdLUdbgdr48q78nRHUmiqXSQ/exec";
 // SCRIPT_URL_MARKER_END
 
 const OLD_DEPRECATED_URL = "https://script.google.com/macros/s/AKfycbx8Dx0DSE7RsQn7-FzpCXT1peNxZ1_09IawvuwGRjZKs65gCcg1P8-W_jspyVS8AxhCHA/exec";
@@ -463,6 +466,9 @@ export const fetchGuestsFromGoogleSheets = async (targetUrl?: string): Promise<a
   }
 };
 
+// Client-side Anti-Duplicate Submission Lock (Mencegah double click / multi-dispatch)
+const recentClientSubmissions = new Map<string, number>();
+
 export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): Promise<boolean> => {
   try {
     const finalUrl = targetUrl || getStoredAppsScriptUrl();
@@ -470,6 +476,17 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       console.warn('URL Google Apps Script tidak valid.');
       return false;
     }
+
+    // Identifikasi unik pengisian formulir
+    const subKey = `${String(guest.nama || '').trim().toLowerCase()}_${String(guest.instansi || '').trim().toLowerCase()}_${String(guest.tujuan || '').trim().toLowerCase()}`;
+    const now = Date.now();
+
+    // Jika identitas yang sama dikirimkan dalam kurun waktu 10 detik, jangan kirim ulang (cegah duplikasi)
+    if (recentClientSubmissions.has(subKey) && (now - (recentClientSubmissions.get(subKey) || 0)) < 10000) {
+      console.log('Duplikasi pengisian dicegah di client-side.');
+      return true;
+    }
+    recentClientSubmissions.set(subKey, now);
 
     const payloadData: Record<string, string> = {
       action: 'addGuest',
@@ -484,8 +501,7 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
       _t: String(Date.now()),
     };
 
-    // Jalur 1: Coba kirim via proxy server backend (1 kali pengiriman pasti & bersih)
-    let proxySucceeded = false;
+    // Jalur Utama: Kirim tepat 1 kali melalui backend proxy server
     try {
       const response = await fetch('/api/guests', {
         method: 'POST',
@@ -493,15 +509,15 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
         body: JSON.stringify({ ...guest, targetUrl: finalUrl }),
       });
       if (response && response.ok) {
-        proxySucceeded = true;
         return true;
       }
     } catch (e) {
-      proxySucceeded = false;
+      // Hanya jika backend server offline (misal preview static), gunakan 1 metode fallback
+      console.warn('Backend proxy tidak merespon, mencoba direct submit fallback...');
     }
 
-    // Jalur 2: Hanya jika backend proxy tidak aktif/offline (misalnya static hosting), gunakan 1 metode fallback (Hidden Form POST)
-    if (!proxySucceeded && typeof document !== 'undefined') {
+    // Jalur Cadangan (Khusus jika backend proxy tidak aktif sama sekali)
+    if (typeof document !== 'undefined') {
       try {
         let iframe = document.getElementById('gscript_hidden_iframe') as HTMLIFrameElement;
         if (!iframe) {
@@ -534,7 +550,6 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
             document.body.removeChild(form);
           }
         }, 3000);
-        return true;
       } catch (e) {
         console.warn('Hidden form fallback warning:', e);
       }
@@ -543,7 +558,7 @@ export const sendGuestToGoogleSheets = async (guest: any, targetUrl?: string): P
     return true;
   } catch (err) {
     console.warn('Gagal mengirim data ke Google Sheets:', err instanceof Error ? err.message : String(err));
-    return true; // Return true so local state is retained gracefully
+    return true;
   }
 };
 
