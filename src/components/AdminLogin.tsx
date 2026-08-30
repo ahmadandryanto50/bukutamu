@@ -102,15 +102,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="max-w-md mx-auto w-full py-6 sm:py-10 px-2">
-      {/* Neumorphic Soft UI Card */}
-      <div className="bg-[#EBF1F7] rounded-[36px] shadow-[20px_20px_45px_rgba(10,25,47,0.35),-15px_-15px_35px_rgba(255,255,255,0.15)] border border-white/40 p-7 sm:p-9 relative overflow-hidden">
+    <div className="max-w-xs sm:max-w-sm mx-auto w-full py-2 sm:py-4 px-3">
+      {/* Neumorphic Soft UI Card - Compact Edition */}
+      <div className="bg-[#EBF1F7] rounded-[24px] shadow-[14px_14px_30px_rgba(10,25,47,0.3),-10px_-10px_25px_rgba(255,255,255,0.15)] border border-white/40 p-4 sm:p-5 relative overflow-hidden">
         
-
-
         {/* Top Center Emblem Badge */}
-        <div className="flex justify-center pt-2 pb-1">
-          <div className="w-22 h-22 sm:w-24 sm:h-24 rounded-full bg-[#EBF1F7] shadow-[6px_6px_14px_rgba(166,180,200,0.5),-6px_-6px_14px_rgba(255,255,255,0.95)] border border-white/80 p-2.5 flex items-center justify-center overflow-hidden">
+        <div className="flex justify-center pt-1 pb-0.5">
+          <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-[#EBF1F7] shadow-[4px_4px_10px_rgba(166,180,200,0.5),-4px_-4px_10px_rgba(255,255,255,0.95)] border border-white/80 p-1.5 flex items-center justify-center overflow-hidden">
             <div className="w-full h-full rounded-full bg-gradient-to-tr from-blue-700 via-blue-600 to-sky-400 flex flex-col items-center justify-center text-white p-1 shadow-inner border border-amber-300/60 overflow-hidden">
               {settings.logo_url && settings.logo_url.startsWith('http') ? (
                 <img 
@@ -123,7 +121,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
                     const parent = e.currentTarget.parentElement;
                     if (parent) {
                       const fallback = document.createElement('span');
-                      fallback.className = "text-white text-xs font-bold";
+                      fallback.className = "text-white text-[10px] font-bold";
                       fallback.innerText = settings.nama_sekolah.substring(0, 4).toUpperCase();
                       parent.appendChild(fallback);
                     }
@@ -131,8 +129,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
                 />
               ) : (
                 <>
-                  <School className="w-7 h-7 text-white drop-shadow-md" />
-                  <span className="text-[8px] font-black tracking-widest text-amber-200 mt-0.5">
+                  <School className="w-5 h-5 text-white drop-shadow-md" />
+                  <span className="text-[7px] font-black tracking-widest text-amber-200 mt-0.5">
                     {settings.nama_sekolah.replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase()}
                   </span>
                 </>
@@ -141,33 +139,29 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
 
-
-
         {/* Subtle Divider */}
-        <div className="w-full border-t border-slate-300/60 my-4" />
+        <div className="w-full border-t border-slate-300/60 my-2.5" />
 
         {/* App Title Badge */}
-        <div className="text-center mb-5">
-          <span className="text-xs sm:text-sm font-black text-blue-600 tracking-wider uppercase block">
+        <div className="text-center mb-3.5">
+          <span className="text-[11px] sm:text-xs font-black text-blue-600 tracking-wider uppercase block">
             BUKU TAMU DIGITAL
           </span>
-          <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase block mt-0.5">
+          <span className="text-[9px] font-bold text-slate-500 tracking-wider uppercase block mt-0.5">
             {settings.nama_sekolah}
           </span>
         </div>
 
-
-
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {/* Username Field */}
           <div>
-            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-2 block pl-1">
+            <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1 block pl-1">
               USERNAME / EMAIL
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <User className="w-4 h-4 text-slate-400" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <User className="w-3.5 h-3.5 text-slate-400" />
               </div>
               <input
                 type="text"
@@ -175,19 +169,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="admin"
                 required
-                className="w-full pl-11 pr-4 py-3 sm:py-3.5 bg-[#EAF0F6] rounded-2xl text-slate-800 font-semibold text-sm shadow-[inset_3px_3px_6px_rgba(166,180,200,0.45),inset_-3px_-3px_6px_rgba(255,255,255,0.95)] outline-none border border-transparent focus:border-blue-400/60 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-3 py-2 sm:py-2.5 bg-[#EAF0F6] rounded-xl text-slate-800 font-semibold text-xs shadow-[inset_2px_2px_5px_rgba(166,180,200,0.45),inset_-2px_-2px_5px_rgba(255,255,255,0.95)] outline-none border border-transparent focus:border-blue-400/60 transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
 
           {/* Password Field */}
           <div>
-            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-2 block pl-1">
+            <label className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider mb-1 block pl-1">
               PASSWORD
             </label>
             <div className="relative flex items-center">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Lock className="w-4 h-4 text-slate-400" />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -195,36 +189,36 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="w-full pl-11 pr-12 py-3 sm:py-3.5 bg-[#EAF0F6] rounded-2xl text-slate-800 font-semibold text-sm shadow-[inset_3px_3px_6px_rgba(166,180,200,0.45),inset_-3px_-3px_6px_rgba(255,255,255,0.95)] outline-none border border-transparent focus:border-blue-400/60 transition-all placeholder:text-slate-400"
+                className="w-full pl-9 pr-9 py-2 sm:py-2.5 bg-[#EAF0F6] rounded-xl text-slate-800 font-semibold text-xs shadow-[inset_2px_2px_5px_rgba(166,180,200,0.45),inset_-2px_-2px_5px_rgba(255,255,255,0.95)] outline-none border border-transparent focus:border-blue-400/60 transition-all placeholder:text-slate-400"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 w-7 h-7 rounded-full bg-[#EBF1F7] shadow-[2px_2px_5px_rgba(166,180,200,0.5),-2px_-2px_5px_rgba(255,255,255,0.95)] flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all"
+                className="absolute right-2.5 w-6 h-6 rounded-full bg-[#EBF1F7] shadow-[1px_1px_4px_rgba(166,180,200,0.5),-1px_-1px_4px_rgba(255,255,255,0.95)] flex items-center justify-center text-slate-500 hover:text-slate-800 transition-all"
               >
-                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
               </button>
             </div>
           </div>
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="p-3 bg-red-100/90 border border-red-300 text-red-800 text-xs font-bold rounded-xl text-center shadow-sm">
+            <div className="p-2 bg-red-100/90 border border-red-300 text-red-800 text-[10px] font-bold rounded-lg text-center shadow-sm">
               <p>Username atau Password salah!</p>
             </div>
           )}
 
           {/* Submit Button */}
-          <div className="pt-2">
+          <div className="pt-1">
             <button
               type="submit"
               disabled={isChecking}
-              className="w-full py-3.5 px-6 rounded-2xl bg-[#EBF1F7] shadow-[6px_6px_14px_rgba(166,180,200,0.5),-6px_-6px_14px_rgba(255,255,255,0.95)] hover:shadow-[inset_3px_3px_6px_rgba(166,180,200,0.45),inset_-3px_-3px_6px_rgba(255,255,255,0.95)] text-[#1E293B] hover:text-blue-700 font-extrabold text-sm sm:text-base transition-all active:scale-[0.99] flex items-center justify-center gap-2 border border-white/60 disabled:opacity-70"
+              className="w-full py-2.5 px-4 rounded-xl bg-[#EBF1F7] shadow-[4px_4px_10px_rgba(166,180,200,0.5),-4px_-4px_10px_rgba(255,255,255,0.95)] hover:shadow-[inset_2px_2px_5px_rgba(166,180,200,0.45),inset_-2px_-2px_5px_rgba(255,255,255,0.95)] text-[#1E293B] hover:text-blue-700 font-extrabold text-xs sm:text-sm transition-all active:scale-[0.99] flex items-center justify-center gap-1.5 border border-white/60 disabled:opacity-70"
             >
-              {isChecking ? 'Checking...' : (
+              {isChecking ? 'Memeriksa...' : (
                 <>
                   <span>Sign In</span>
-                  <ArrowRight className="w-4 h-4 text-blue-600" />
+                  <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
                 </>
               )}
             </button>

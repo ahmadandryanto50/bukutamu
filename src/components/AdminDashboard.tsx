@@ -89,6 +89,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [dataMonthFilter, setDataMonthFilter] = useState<string>('all');
+  const [dataYearFilter, setDataYearFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedGuest, setSelectedGuest] = useState<GuestEntry | null>(null);
   const [guestToDelete, setGuestToDelete] = useState<GuestEntry | null>(null);
@@ -101,6 +103,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isShareUrlCopied, setIsShareUrlCopied] = useState(false);
   const [scriptUrl, setScriptUrl] = useState(getStoredAppsScriptUrl());
   const [isSavedUrl, setIsSavedUrl] = useState(false);
+
+  const INDONESIAN_MONTHS = useMemo(() => [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ], []);
+
+  // Dynamic list of years from data + current year + surrounding years
+  const availableYears = useMemo(() => {
+    const yearsSet = new Set<number>();
+    const currentYear = new Date().getFullYear();
+    
+    // Always include current year, past 3 years, and next 5 years for a complete range
+    yearsSet.add(currentYear);
+    for (let i = 1; i <= 3; i++) {
+      yearsSet.add(currentYear - i);
+    }
+    for (let i = 1; i <= 5; i++) {
+      yearsSet.add(currentYear + i);
+    }
+
+    // Also parse and add any historical years present in the guest list database
+    guests.forEach(g => {
+      const parsed = parseGuestDate(g.waktu);
+      if (parsed && parsed.year > 1900 && parsed.year < 2100) {
+        yearsSet.add(parsed.year);
+      }
+    });
+
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [guests]);
 
   useEffect(() => {
     const handleSettingsEvent = (e: any) => {
@@ -199,11 +231,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setIsSavedUrl(false), 2000);
   };
 
+  // Filtered Guests based on Search, Category, Month, and Year
+  const filteredGuests = useMemo(() => {
+    return guests.filter((guest) => {
+      const matchesSearch = 
+        guest.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.instansi.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        guest.tujuan.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (guest.keperluan && guest.keperluan.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesCategory = categoryFilter === 'all' || guest.kategori === categoryFilter;
 
-  // Stats calculation
-  const totalTamu = guests.length;
-  const totalUmum = guests.filter(g => g.kategori === 'Umum').length;
-  const totalKhusus = guests.filter(g => g.kategori === 'Khusus').length;
+      let matchesDate = true;
+      if (dataMonthFilter !== 'all' || dataYearFilter !== 'all') {
+        const parsed = parseGuestDate(guest.waktu);
+        if (!parsed) {
+          matchesDate = false;
+        } else {
+          if (dataMonthFilter !== 'all' && parsed.month !== parseInt(dataMonthFilter, 10)) {
+            matchesDate = false;
+          }
+          if (dataYearFilter !== 'all' && parsed.year !== parseInt(dataYearFilter, 10)) {
+            matchesDate = false;
+          }
+        }
+      }
+      
+      return matchesSearch && matchesCategory && matchesDate;
+    });
+  }, [guests, searchQuery, categoryFilter, dataMonthFilter, dataYearFilter]);
+
+  // Dynamic stats calculation matching selected period
+  const activePeriodStats = useMemo(() => {
+    const periodGuests = guests.filter((guest) => {
+      if (dataMonthFilter === 'all' && dataYearFilter === 'all') return true;
+      const parsed = parseGuestDate(guest.waktu);
+      if (!parsed) return false;
+      if (dataMonthFilter !== 'all' && parsed.month !== parseInt(dataMonthFilter, 10)) return false;
+      if (dataYearFilter !== 'all' && parsed.year !== parseInt(dataYearFilter, 10)) return false;
+      return true;
+    });
+
+    const total = periodGuests.length;
+    const umum = periodGuests.filter(g => g.kategori === 'Umum').length;
+    const khusus = periodGuests.filter(g => g.kategori === 'Khusus').length;
+    const laki = periodGuests.filter(g => g.jk === 'Laki-laki').length;
+    const perempuan = periodGuests.filter(g => g.jk === 'Perempuan').length;
+
+    return { total, umum, khusus, laki, perempuan };
+  }, [guests, dataMonthFilter, dataYearFilter]);
   
   const totalHariIni = useMemo(() => {
     const now = new Date();
@@ -217,19 +293,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }).length;
   }, [guests]);
 
-  const filteredGuests = useMemo(() => {
-    return guests.filter((guest) => {
-      const matchesSearch = 
-        guest.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.instansi.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        guest.tujuan.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesCategory = categoryFilter === 'all' || guest.kategori === categoryFilter;
-      
-      return matchesSearch && matchesCategory;
-    });
-  }, [guests, searchQuery, categoryFilter]);
-
   const handleRefreshClick = () => {
     setIsRefreshing(true);
     onRefresh();
@@ -240,7 +303,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const headers = ["No", "Tanggal & Waktu", "Kategori", "Nama", "Jenis Kelamin", "Instansi/Asal", "Tujuan", "Keperluan", "Saran", "No. HP/WA"];
     const csvContent = [
       headers.join(','),
-      ...guests.map((g, idx) => {
+      ...filteredGuests.map((g, idx) => {
         const no = idx + 1;
         const waktuValue = g.waktu || '';
         const kategoriValue = g.kategori || 'Umum';
@@ -255,10 +318,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       })
     ].join('\n');
 
+    let periodSuffix = '';
+    if (dataMonthFilter !== 'all' && dataYearFilter !== 'all') {
+      periodSuffix = `_${INDONESIAN_MONTHS[parseInt(dataMonthFilter, 10)]}_${dataYearFilter}`;
+    } else if (dataMonthFilter !== 'all') {
+      periodSuffix = `_${INDONESIAN_MONTHS[parseInt(dataMonthFilter, 10)]}`;
+    } else if (dataYearFilter !== 'all') {
+      periodSuffix = `_Tahun_${dataYearFilter}`;
+    }
+
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `Data_Tamu_Lengkap_${new Date().toLocaleDateString('id-ID')}.csv`;
+    link.download = `Data_Tamu${periodSuffix}_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`;
     link.click();
   };
 
@@ -269,55 +341,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
 
+    let periodSubtitle = 'Semua Periode Kunjungan';
+    if (dataMonthFilter !== 'all' && dataYearFilter !== 'all') {
+      periodSubtitle = `Bulan ${INDONESIAN_MONTHS[parseInt(dataMonthFilter, 10)]} ${dataYearFilter}`;
+    } else if (dataMonthFilter !== 'all') {
+      periodSubtitle = `Bulan ${INDONESIAN_MONTHS[parseInt(dataMonthFilter, 10)]}`;
+    } else if (dataYearFilter !== 'all') {
+      periodSubtitle = `Tahun ${dataYearFilter}`;
+    }
+
     const reportTitle = `Laporan Daftar Tamu & Pengunjung`;
 
     const rowsHtml = filteredGuests.map((g, idx) => {
       const no = idx + 1;
-      const nohpValue = g.nohp || (g as any).noHp || '';
-      const keperluan = g.keperluan || '';
+      const nohpValue = g.nohp || (g as any).noHp || '-';
+      const keperluan = g.keperluan || '-';
+      const saran = g.saran || '-';
       return `
         <tr>
-          <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${no}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-family: monospace; font-size: 11px;">${g.waktu}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${g.nama}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${g.kategori}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-size: 12px;">${g.jk}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${g.instansi}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${g.tujuan}</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${keperluan}</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">${nohpValue}</td>
+          <td style="padding: 8px; border: 1px solid #111; text-align: center;">${no}</td>
+          <td style="padding: 8px; border: 1px solid #111; text-align: center; font-family: monospace; font-size: 11px;">${g.waktu}</td>
+          <td style="padding: 8px; border: 1px solid #111; font-weight: bold;">${g.nama}</td>
+          <td style="padding: 8px; border: 1px solid #111; text-align: center; font-size: 11px;">${g.kategori}</td>
+          <td style="padding: 8px; border: 1px solid #111; text-align: center; font-size: 11px;">${g.jk}</td>
+          <td style="padding: 8px; border: 1px solid #111;">${g.instansi || '-'}</td>
+          <td style="padding: 8px; border: 1px solid #111;">${g.tujuan || '-'}</td>
+          <td style="padding: 8px; border: 1px solid #111;">${keperluan}</td>
+          <td style="padding: 8px; border: 1px solid #111;">${saran}</td>
+          <td style="padding: 8px; border: 1px solid #111; font-size: 11px;">${nohpValue}</td>
         </tr>
       `;
     }).join('');
 
     const emptyRowHtml = filteredGuests.length === 0 ? `
       <tr>
-        <td colspan="9" style="padding: 24px; border: 1px solid #ddd; text-align: center; color: #666; font-style: italic;">Tidak ada data tamu yang sesuai penyaringan.</td>
+        <td colspan="10" style="padding: 24px; border: 1px solid #ddd; text-align: center; color: #666; font-style: italic;">Tidak ada data tamu yang sesuai penyaringan.</td>
       </tr>
     ` : '';
 
-    const logoHtml = schoolLogo 
-      ? `<img src="${schoolLogo}" style="height: 85px; max-width: 100px; object-fit: contain; margin-right: 20px;" alt="Logo" referrerPolicy="no-referrer" />`
-      : '';
+    const logoPalu = '/logo_palu.png';
+    const logoSmp = schoolLogo || '/logo_smp11.jpg';
 
     printWindow.document.write(`
       <html>
         <head>
           <title>${reportTitle}</title>
           <style>
-            body { font-family: 'Times New Roman', Times, serif; color: #111; margin: 40px; line-height: 1.5; }
-            .kop-surat { display: flex; align-items: center; border-bottom: 4px double #000; padding-bottom: 12px; margin-bottom: 25px; }
-            .kop-text { flex-grow: 1; text-align: center; }
-            .kop-text h1 { margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-            .kop-text h2 { margin: 3px 0; font-size: 21px; font-weight: bold; text-transform: uppercase; }
-            .kop-text p { margin: 2px 0 0; font-size: 11px; font-style: italic; color: #444; }
-            .report-title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 30px; text-transform: uppercase; text-decoration: underline; }
-            .info-table { font-size: 13px; margin-bottom: 20px; border-collapse: collapse; width: 100%; }
-            .info-table td { padding: 4px 0; border: none; }
+            body { font-family: 'Times New Roman', Times, serif; color: #111; margin: 30px; line-height: 1.4; }
+            .kop-surat { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4px; }
+            .kop-logo-left, .kop-logo-right { height: 95px; width: auto; max-width: 95px; object-fit: contain; flex-shrink: 0; }
+            .kop-text { flex-grow: 1; text-align: center; padding: 0 15px; }
+            .kop-pemkot { font-size: 19px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 2px; }
+            .kop-sekolah { font-size: 26px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .kop-nss { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+            .kop-alamat { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+            .kop-kontak { font-size: 13px; margin: 0; }
+            .kop-line { border-top: 3.5px solid #000; border-bottom: 1.2px solid #000; height: 3px; margin-top: 5px; margin-bottom: 25px; }
+            .report-title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 25px; text-transform: uppercase; text-decoration: underline; }
+            .info-table { font-size: 13px; margin-bottom: 18px; border-collapse: collapse; width: 100%; }
+            .info-table td { padding: 3px 0; border: none; }
             .stats-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 35px; font-size: 12px; }
             .stats-table th { background-color: #f5f5f5; font-weight: bold; padding: 10px; border: 1px solid #111; text-transform: uppercase; font-size: 11px; text-align: center; }
             .stats-table td { border: 1px solid #111; padding: 8px; }
-            .signature-section { margin-top: 60px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 13px; }
+            .signature-section { margin-top: 50px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 13px; }
             .signature-box { width: 250px; text-align: center; }
             .signature-space { height: 75px; }
             @media print {
@@ -328,47 +414,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </head>
         <body>
           <div class="kop-surat">
-            ${logoHtml}
+            <img src="${logoPalu}" class="kop-logo-left" alt="Logo Kota Palu" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/5/54/Lambang_Kota_Palu.png'" />
             <div class="kop-text">
-              <h1>PEMERINTAH PROVINSI SULAWESI TENGAH</h1>
-              <h1>DINAS PENDIDIKAN DAN KEBUDAYAAN</h1>
-              <h2>${schoolName || 'SMP NEGERI 11 PALU'}</h2>
-              <p>Alamat: Jl. Ki Hajar Dewantara No. 11, Palu, Sulawesi Tengah. Telp: (0451) 421234</p>
+              <div class="kop-pemkot">PEMERINTAH KOTA PALU</div>
+              <div class="kop-sekolah">${schoolName ? schoolName.toUpperCase() : 'SMP NEGERI 11 PALU'}</div>
+              <div class="kop-nss">NSS : 2011866001011 – NIS : 200110 – NPSN : 40203578</div>
+              <div class="kop-alamat">ALAMAT : JL. KERAMIK KEL. DUYU KEC. TATANGA (0451) – 8202057</div>
+              <div class="kop-kontak">Website :http://www.smpn11palu.sch.id &nbsp;&nbsp; Email.smpnegeri11palu@gmail.com</div>
             </div>
+            <img src="${logoSmp}" class="kop-logo-right" alt="Logo Sekolah" onerror="this.src='https://cdn.phototourl.com/free/2026-08-29-9f6b4b4c-d28f-41fc-922e-7f6792ef2ca0.jpg'" />
           </div>
+          <div class="kop-line"></div>
           
           <div class="report-title">${reportTitle}</div>
           
           <table class="info-table">
             <tr>
-              <td style="width: 15%;"><strong>Penyaringan</strong></td>
+              <td style="width: 18%;"><strong>Penyaringan Kategori</strong></td>
               <td style="width: 2%;">:</td>
-              <td>${categoryFilter === 'all' ? 'Semua Kategori' : 'Kategori ' + categoryFilter} ${searchQuery ? `(Kata Kunci: "${searchQuery}")` : ''}</td>
-            </tr>
-            <tr>
-              <td><strong>Tanggal Cetak</strong></td>
-              <td>:</td>
+              <td style="width: 30%;">${categoryFilter === 'all' ? 'Semua Kategori' : 'Kategori ' + categoryFilter} ${searchQuery ? `(Kata Kunci: "${searchQuery}")` : ''}</td>
+              <td style="width: 18%;"><strong>Tanggal Cetak</strong></td>
+              <td style="width: 2%;">:</td>
               <td>${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</td>
             </tr>
             <tr>
-              <td><strong>Jumlah Baris</strong></td>
+              <td><strong>Periode Waktu</strong></td>
               <td>:</td>
-              <td>${filteredGuests.length} baris data</td>
+              <td><strong>${periodSubtitle}</strong></td>
+              <td><strong>Jumlah Baris Data</strong></td>
+              <td>:</td>
+              <td><strong>${filteredGuests.length}</strong> baris tamu</td>
             </tr>
           </table>
 
           <table class="stats-table">
             <thead>
               <tr>
-                <th style="width: 5%;">No</th>
-                <th style="width: 12%;">Waktu</th>
-                <th style="width: 18%;">Nama Lengkap</th>
-                <th style="width: 10%;">Kategori</th>
-                <th style="width: 10%;">Gender</th>
-                <th style="width: 15%;">Instansi</th>
-                <th style="width: 12%;">Tujuan</th>
-                <th style="width: 18%;">Keperluan</th>
-                <th style="width: 10%;">No. HP/WA</th>
+                <th style="width: 4%;">No</th>
+                <th style="width: 11%;">Waktu</th>
+                <th style="width: 15%;">Nama Lengkap</th>
+                <th style="width: 8%;">Kategori</th>
+                <th style="width: 8%;">Gender</th>
+                <th style="width: 12%;">Instansi</th>
+                <th style="width: 11%;">Tujuan</th>
+                <th style="width: 13%;">Keperluan</th>
+                <th style="width: 10%;">Saran</th>
+                <th style="width: 8%;">No. HP/WA</th>
               </tr>
             </thead>
             <tbody>
@@ -389,8 +480,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <p>Palu, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
               <p style="font-weight: bold; margin-top: 5px;">Petugas Admin</p>
               <div class="signature-space"></div>
-              <p style="text-decoration: underline; font-weight: bold;">${schoolName ? 'Operator ' + schoolName : 'Petugas Perpustakaan'}</p>
-              <p>NIP/NPT. ....................................</p>
+              <p style="text-decoration: underline; font-weight: bold;">..................................................</p>
+              <p>NIP. ..........................................</p>
             </div>
           </div>
 
@@ -405,12 +496,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     printWindow.document.close();
   };
 
-  const INDONESIAN_MONTHS = useMemo(() => [
-    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-  ], []);
-
-  // Filter guests in the selected month & year
+  // Filter guests in the selected month & year for Recap Tab
   const selectedMonthGuests = useMemo(() => {
     return guests.filter(g => {
       const parsed = parseGuestDate(g.waktu);
@@ -419,7 +505,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     });
   }, [guests, selectedMonth, selectedYear]);
 
-  // Aggregate stats for the selected month
+  // Aggregate stats for the selected month in Recap Tab
   const selectedMonthStats = useMemo(() => {
     const total = selectedMonthGuests.length;
     const umum = selectedMonthGuests.filter(g => g.kategori === 'Umum').length;
@@ -455,31 +541,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }));
   }, [selectedMonthGuests]);
 
-  // Dynamic list of years from data + current year + surrounding years
-  const availableYears = useMemo(() => {
-    const yearsSet = new Set<number>();
-    const currentYear = new Date().getFullYear();
-    
-    // Always include current year, past 3 years, and next 5 years for a complete range
-    yearsSet.add(currentYear);
-    for (let i = 1; i <= 3; i++) {
-      yearsSet.add(currentYear - i);
-    }
-    for (let i = 1; i <= 5; i++) {
-      yearsSet.add(currentYear + i);
-    }
-
-    // Also parse and add any historical years present in the guest list database
-    guests.forEach(g => {
-      const parsed = parseGuestDate(g.waktu);
-      if (parsed && parsed.year > 1900 && parsed.year < 2100) {
-        yearsSet.add(parsed.year);
-      }
-    });
-
-    return Array.from(yearsSet).sort((a, b) => b - a);
-  }, [guests]);
-
   // Handlers for printing and exporting monthly data
   const handlePrintMonthly = () => {
     const printWindow = window.open('', '_blank');
@@ -510,32 +571,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </tr>
     ` : '';
 
-    const logoHtml = schoolLogo 
-      ? `<img src="${schoolLogo}" style="height: 85px; max-width: 100px; object-fit: contain; margin-right: 20px;" alt="Logo" referrerPolicy="no-referrer" />`
-      : '';
+    const logoPalu = '/logo_palu.png';
+    const logoSmp = schoolLogo || '/logo_smp11.jpg';
 
     printWindow.document.write(`
       <html>
         <head>
           <title>${reportTitle} - ${periodStr}</title>
           <style>
-            body { font-family: 'Times New Roman', Times, serif; color: #111; margin: 40px; line-height: 1.5; }
-            .kop-surat { display: flex; align-items: center; border-b: 4px double #000; padding-bottom: 12px; margin-bottom: 25px; }
-            .kop-text { flex-grow: 1; text-align: center; }
-            .kop-text h1 { margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
-            .kop-text h2 { margin: 3px 0; font-size: 21px; font-weight: bold; text-transform: uppercase; }
-            .kop-text p { margin: 2px 0 0; font-size: 11px; font-style: italic; color: #444; }
-            .report-title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 30px; text-transform: uppercase; text-decoration: underline; }
+            body { font-family: 'Times New Roman', Times, serif; color: #111; margin: 30px; line-height: 1.4; }
+            .kop-surat { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4px; }
+            .kop-logo-left, .kop-logo-right { height: 95px; width: auto; max-width: 95px; object-fit: contain; flex-shrink: 0; }
+            .kop-text { flex-grow: 1; text-align: center; padding: 0 15px; }
+            .kop-pemkot { font-size: 19px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 2px; }
+            .kop-sekolah { font-size: 26px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .kop-nss { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+            .kop-alamat { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
+            .kop-kontak { font-size: 13px; margin: 0; }
+            .kop-line { border-top: 3.5px solid #000; border-bottom: 1.2px solid #000; height: 3px; margin-top: 5px; margin-bottom: 25px; }
+            .report-title { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 25px; text-transform: uppercase; text-decoration: underline; }
             .info-table { font-size: 13px; margin-bottom: 20px; border-collapse: collapse; width: 100%; }
             .info-table td { padding: 4px 0; border: none; }
             .stats-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 35px; font-size: 13px; }
             .stats-table th { background-color: #f5f5f5; font-weight: bold; padding: 10px; border: 1px solid #111; text-transform: uppercase; font-size: 12px; }
             .stats-table td { border: 1px solid #111; }
-            .summary-cards { display: grid; grid-template-cols: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
+            .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
             .card { border: 1px solid #111; padding: 15px; border-radius: 4px; text-align: center; background-color: #fafafa; }
             .card-title { font-size: 11px; font-weight: bold; color: #333; text-transform: uppercase; margin-bottom: 5px; letter-spacing: 0.5px; }
             .card-value { font-size: 26px; font-weight: bold; }
-            .signature-section { margin-top: 60px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 13px; }
+            .signature-section { margin-top: 50px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 13px; }
             .signature-box { width: 250px; text-align: center; }
             .signature-space { height: 75px; }
             @media print {
@@ -546,14 +610,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </head>
         <body>
           <div class="kop-surat">
-            ${logoHtml}
+            <img src="${logoPalu}" class="kop-logo-left" alt="Logo Kota Palu" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/5/54/Lambang_Kota_Palu.png'" />
             <div class="kop-text">
-              <h1>PEMERINTAH PROVINSI SULAWESI TENGAH</h1>
-              <h1>DINAS PENDIDIKAN DAN KEBUDAYAAN</h1>
-              <h2>${schoolName || 'SMP NEGERI 11 PALU'}</h2>
-              <p>Alamat: Jl. Ki Hajar Dewantara No. 11, Palu, Sulawesi Tengah. Telp: (0451) 421234</p>
+              <div class="kop-pemkot">PEMERINTAH KOTA PALU</div>
+              <div class="kop-sekolah">${schoolName ? schoolName.toUpperCase() : 'SMP NEGERI 11 PALU'}</div>
+              <div class="kop-nss">NSS : 2011866001011 – NIS : 200110 – NPSN : 40203578</div>
+              <div class="kop-alamat">ALAMAT : JL. KERAMIK KEL. DUYU KEC. TATANGA (0451) – 8202057</div>
+              <div class="kop-kontak">Website :http://www.smpn11palu.sch.id &nbsp;&nbsp; Email.smpnegeri11palu@gmail.com</div>
             </div>
+            <img src="${logoSmp}" class="kop-logo-right" alt="Logo Sekolah" onerror="this.src='https://cdn.phototourl.com/free/2026-08-29-9f6b4b4c-d28f-41fc-922e-7f6792ef2ca0.jpg'" />
           </div>
+          <div class="kop-line"></div>
           
           <div class="report-title">${reportTitle}</div>
           
@@ -621,8 +688,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <p>Palu, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
               <p style="font-weight: bold; margin-top: 5px;">Petugas Admin</p>
               <div class="signature-space"></div>
-              <p style="text-decoration: underline; font-weight: bold;">${schoolName ? 'Operator ' + schoolName : 'Petugas Perpustakaan'}</p>
-              <p>NIP/NPT. ....................................</p>
+              <p style="text-decoration: underline; font-weight: bold;">..................................................</p>
+              <p>NIP. ..........................................</p>
             </div>
           </div>
 
@@ -764,19 +831,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Bento Grid Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: 'Total Pengunjung', value: totalTamu, icon: Users, color: 'text-blue-600', bg: 'bg-blue-100/80' },
-              { label: 'Tamu Umum', value: totalUmum, icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-100/80' },
-              { label: 'Tamu Khusus', value: totalKhusus, icon: Award, color: 'text-amber-600', bg: 'bg-amber-100/80' },
-              { label: 'Kunjungan Hari Ini', value: totalHariIni, icon: CalendarDays, color: 'text-purple-600', bg: 'bg-purple-100/80' },
+              { 
+                label: dataMonthFilter !== 'all' || dataYearFilter !== 'all' 
+                  ? `Tamu ${dataMonthFilter !== 'all' ? INDONESIAN_MONTHS[parseInt(dataMonthFilter, 10)] : ''} ${dataYearFilter !== 'all' ? dataYearFilter : ''}`.trim()
+                  : 'Total Pengunjung', 
+                value: activePeriodStats.total, 
+                icon: Users, 
+                color: 'text-blue-600', 
+                bg: 'bg-blue-100/80',
+                sub: dataMonthFilter !== 'all' || dataYearFilter !== 'all' ? 'Sesuai Filter Periode' : 'Seluruh Database'
+              },
+              { 
+                label: 'Tamu Umum', 
+                value: activePeriodStats.umum, 
+                icon: Users, 
+                color: 'text-emerald-600', 
+                bg: 'bg-emerald-100/80',
+                sub: `${activePeriodStats.total > 0 ? Math.round((activePeriodStats.umum / activePeriodStats.total) * 100) : 0}% dari total periode`
+              },
+              { 
+                label: 'Tamu Khusus', 
+                value: activePeriodStats.khusus, 
+                icon: Award, 
+                color: 'text-amber-600', 
+                bg: 'bg-amber-100/80',
+                sub: `${activePeriodStats.total > 0 ? Math.round((activePeriodStats.khusus / activePeriodStats.total) * 100) : 0}% dari total periode`
+              },
+              { 
+                label: 'Kunjungan Hari Ini', 
+                value: totalHariIni, 
+                icon: CalendarDays, 
+                color: 'text-purple-600', 
+                bg: 'bg-purple-100/80',
+                sub: `Rasio: ${activePeriodStats.laki} L / ${activePeriodStats.perempuan} P`
+              },
             ].map((stat, i) => (
               <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-lg shadow-blue-950/5 flex flex-col justify-between h-32">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">{stat.label}</span>
+                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider line-clamp-1">{stat.label}</span>
                   <div className={`p-2 rounded-lg ${stat.bg} ${stat.color}`}>
                     <stat.icon className="w-4 h-4" />
                   </div>
                 </div>
-                <div className={`text-3xl font-black ${stat.color}`}>{stat.value}</div>
+                <div>
+                  <div className={`text-2xl sm:text-3xl font-black ${stat.color}`}>{stat.value}</div>
+                  <div className="text-[10px] text-slate-600 font-medium mt-0.5">{stat.sub}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -784,8 +884,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Table Section */}
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl overflow-hidden flex flex-col">
             {/* Table Controls */}
-            <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
+            <div className="p-4 border-b border-slate-200 bg-slate-50/70 flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
@@ -795,22 +895,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition-colors placeholder:text-slate-400"
                 />
               </div>
-              <div className="relative shrink-0">
-                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                  <Filter className="w-4 h-4 text-slate-400" />
+
+              {/* Filters: Month, Year, Category */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Filter Bulan */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none">
+                    <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                  <select
+                    value={dataMonthFilter}
+                    onChange={(e) => setDataMonthFilter(e.target.value)}
+                    className="pl-8 pr-7 py-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 appearance-none transition-colors text-slate-800"
+                  >
+                    <option value="all">Semua Bulan</option>
+                    {INDONESIAN_MONTHS.map((month, idx) => (
+                      <option key={idx} value={String(idx)}>{month}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
                 </div>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="pl-9 pr-8 py-2 text-sm font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 appearance-none transition-colors text-slate-800"
-                >
-                  <option value="all">Semua Kategori</option>
-                  <option value="Umum">Tamu Umum</option>
-                  <option value="Khusus">Tamu Khusus</option>
-                </select>
-                <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+
+                {/* Filter Tahun */}
+                <div className="relative">
+                  <select
+                    value={dataYearFilter}
+                    onChange={(e) => setDataYearFilter(e.target.value)}
+                    className="px-3 pr-7 py-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 appearance-none transition-colors text-slate-800"
+                  >
+                    <option value="all">Semua Tahun</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={String(year)}>{year}</option>
+                    ))}
+                  </select>
+                  <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
                 </div>
+
+                {/* Filter Kategori */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-2.5 flex items-center pointer-events-none">
+                    <Filter className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="pl-8 pr-7 py-2 text-xs font-bold bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 appearance-none transition-colors text-slate-800"
+                  >
+                    <option value="all">Semua Kategori</option>
+                    <option value="Umum">Tamu Umum</option>
+                    <option value="Khusus">Tamu Khusus</option>
+                  </select>
+                  <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* Reset Filters */}
+                {(dataMonthFilter !== 'all' || dataYearFilter !== 'all' || categoryFilter !== 'all' || searchQuery !== '') && (
+                  <button
+                    onClick={() => {
+                      setDataMonthFilter('all');
+                      setDataYearFilter('all');
+                      setCategoryFilter('all');
+                      setSearchQuery('');
+                    }}
+                    title="Reset semua filter"
+                    className="px-2.5 py-2 text-xs font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1202,96 +1361,96 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         )}
 
-        {/* Script Code.gs Modal */}
+        {/* Script Code.gs Modal - Compact & Clean */}
         {showScriptModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowScriptModal(false)}
-              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col"
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[85vh] flex flex-col"
             >
-              {/* Modal Header */}
-              <div className="p-6 border-b border-slate-200 bg-slate-50">
+              {/* Modal Header - Compact */}
+              <div className="p-3.5 sm:p-4 border-b border-slate-200 bg-slate-50">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-600/20">
-                      <Code className="w-6 h-6" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-sm">
+                      <Code className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold text-slate-900">Integrasi Google Apps Script & Vercel</h3>
-                      <p className="text-xs font-medium text-slate-600 mt-0.5">
-                        Kelola URL Web App dan salin kode <code>Code.gs</code> untuk koneksi GitHub & Vercel
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 leading-tight">Integrasi Google Apps Script & URL</h3>
+                      <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 mt-0.5">
+                        Kelola URL Web App dan salin kode <code>Code.gs</code> untuk sinkronisasi database
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowScriptModal(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full transition-colors"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Tab Navigation */}
-                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-200/80">
+                {/* Tab Navigation - Compact */}
+                <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-200/80">
                   <button
                     onClick={() => setActiveModalTab('url')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
                       activeModalTab === 'url'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>1. Setel URL Web App</span>
+                    <Globe className="w-3 h-3" />
+                    <span>1. Setel URL</span>
                   </button>
                   <button
                     onClick={() => setActiveModalTab('script')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
                       activeModalTab === 'script'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    <Code className="w-3.5 h-3.5" />
-                    <span>2. Salin Kode Code.gs</span>
+                    <Code className="w-3 h-3" />
+                    <span>2. Kode Code.gs</span>
                   </button>
                   <button
                     onClick={() => setActiveModalTab('vercel')}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${
                       activeModalTab === 'vercel'
                         ? 'bg-blue-600 text-white shadow-sm'
                         : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                     }`}
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>3. Panduan GitHub & Vercel</span>
+                    <ExternalLink className="w-3 h-3" />
+                    <span>3. Panduan Deploy</span>
                   </button>
                 </div>
               </div>
 
-              {/* Modal Content */}
-              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Modal Content - Compact */}
+              <div className="p-3.5 sm:p-4 space-y-3 overflow-y-auto flex-1 text-xs">
                 {/* TAB 1: SETEL URL WEB APP */}
                 {activeModalTab === 'url' && (
-                  <div className="space-y-5">
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="space-y-3">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                          <LinkIcon className="w-4 h-4 text-blue-600" />
+                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <LinkIcon className="w-3.5 h-3.5 text-blue-600" />
                           URL Deployment Web App Google Apps Script
                         </label>
                         {isSavedUrl && (
-                          <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                            <Check className="w-3.5 h-3.5" /> Berhasil Disimpan!
+                          <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            <Check className="w-3 h-3" /> Disimpan!
                           </span>
                         )}
                       </div>
@@ -1302,22 +1461,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           value={scriptUrl}
                           onChange={(e) => setScriptUrl(e.target.value)}
                           placeholder="https://script.google.com/macros/s/AKfycb.../exec (Kosongkan untuk offline)"
-                          className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none"
+                          className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-900 focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none"
                         />
                         <button
                           type="submit"
-                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shrink-0"
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 shadow-sm"
                         >
-                          <Save className="w-4 h-4" />
+                          <Save className="w-3.5 h-3.5" />
                           <span>Simpan URL</span>
                         </button>
                       </form>
                       
                       {scriptUrl && scriptUrl.startsWith('https://script.google.com/') && (
-                        <div className="mt-4 p-4 border border-emerald-100 bg-emerald-50 rounded-xl flex items-center justify-between gap-4">
-                          <div className="space-y-1">
-                            <h4 className="font-bold text-sm text-emerald-900">✨ Bagikan Akses ke HP/Perangkat Lain</h4>
-                            <p className="text-xs text-emerald-700">Karena ini adalah pratinjau yang terisolasi, perangkat teman Anda mungkin tidak mendapatkan URL-nya. Salin dan kirim "Link Sakti" berikut ke HP/teman Anda agar otomatis login!</p>
+                        <div className="p-2.5 border border-emerald-200 bg-emerald-50/80 rounded-lg flex items-center justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <h4 className="font-bold text-xs text-emerald-900">✨ Bagikan Akses (Link Sakti)</h4>
+                            <p className="text-[10px] text-emerald-700 leading-tight">Salin link ini untuk dibuka di HP/perangkat lain agar langsung otomatis terhubung.</p>
                           </div>
                           <button
                             type="button"
@@ -1327,59 +1486,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               setIsUrlCopied(true);
                               setTimeout(() => setIsUrlCopied(false), 2000);
                             }}
-                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg transition-colors flex items-center gap-1 shrink-0 shadow-sm"
                           >
-                            <Copy className="w-4 h-4" />
-                            <span>{isUrlCopied ? 'Tersalin!' : 'Salin Link Sakti'}</span>
+                            <Copy className="w-3 h-3" />
+                            <span>{isUrlCopied ? 'Tersalin!' : 'Salin Link'}</span>
                           </button>
                         </div>
                       )}
 
-                      <p className="text-xs text-slate-500 mt-2">
-                        URL ini didapatkan dari Google Sheets → <strong>Ekstensi</strong> → <strong>Apps Script</strong> → <strong>Terapkan (Deploy) Sebagai Aplikasi Web</strong>.
+                      <p className="text-[10px] text-slate-500">
+                        Dapatkan dari Google Sheets → <strong>Ekstensi</strong> → <strong>Apps Script</strong> → <strong>Terapkan (Deploy)</strong>.
                       </p>
                     </div>
 
-                    <div className="border border-blue-100 bg-blue-50/70 rounded-xl p-4 text-xs text-blue-900 space-y-2">
-                      <p className="font-bold text-sm text-blue-950 flex items-center gap-1.5">
-                        <span>🚀</span> Cara Kerja Sinkronisasi URL:
+                    <div className="border border-blue-100 bg-blue-50/70 rounded-xl p-3 text-[11px] text-blue-900 space-y-1.5">
+                      <p className="font-bold text-xs text-blue-950 flex items-center gap-1">
+                        <span>🚀</span> Catatan Sinkronisasi:
                       </p>
-                      <ul className="list-disc pl-5 space-y-1 font-medium">
-                        <li>Di lingkungan AI Studio, server mungkin saja "tertidur" dan menghapus riwayat setelan karena bersifat tanpa-status (stateless).</li>
-                        <li>Agar koneksi tidak pernah hilang, <strong>Gunakan Tombol Salin Link Sakti di atas</strong> jika Anda ingin menguji di HP atau perangkat teman Anda.</li>
-                        <li>Jika ingin mempublikasikan aplikasi ini ke internet secara permanen, gunakan fitur <strong>Ekspor ke Vercel</strong> di bawah.</li>
+                      <ul className="list-disc pl-4 space-y-0.5 text-[10px] font-medium text-blue-800">
+                        <li>Gunakan tombol <strong>Salin Link</strong> di atas untuk membagikan ke HP guru/staf agar tidak perlu ketik URL lagi.</li>
+                        <li>Untuk hosting permanen (tanpa server AI Studio sleep), gunakan fitur <strong>Panduan Deploy</strong> di tab 3.</li>
                       </ul>
                     </div>
-
-
                   </div>
                 )}
 
                 {/* TAB 2: SALIN KODE CODE.GS */}
                 {activeModalTab === 'script' && (
-                  <div className="space-y-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 space-y-2">
-                      <p className="font-bold text-sm text-blue-950 flex items-center gap-1.5">
-                        <span>💡</span> Cara Pemasangan di Google Sheets:
+                  <div className="space-y-3">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-900 space-y-1">
+                      <p className="font-bold text-xs text-blue-950 flex items-center gap-1">
+                        <span>💡</span> Langkah Pasang di Google Sheets:
                       </p>
-                      <ol className="list-decimal pl-5 space-y-1 font-medium">
-                        <li>Buka Google Sheets target Anda.</li>
-                        <li>Klik menu <strong>Ekstensi</strong> → <strong>Apps Script</strong>.</li>
-                        <li>Hapus seluruh kode bawaan, lalu <strong>Tempel (Paste)</strong> kode <code>Code.gs</code> di bawah ini.</li>
-                        <li>Klik <strong>Terapkan (Deploy)</strong> → <strong>Terapkan Sebagai Aplikasi Web (New Deployment)</strong>.</li>
-                        <li>Setel akses: <em>Who has access</em> ke <strong>Anyone (Siapa saja)</strong>.</li>
+                      <ol className="list-decimal pl-4 space-y-0.5 text-[10px] font-medium text-blue-800">
+                        <li>Buka Google Sheets target → menu <strong>Ekstensi</strong> → <strong>Apps Script</strong>.</li>
+                        <li>Hapus kode lama, lalu <strong>Tempel (Paste)</strong> kode <code>Code.gs</code> di bawah ini.</li>
+                        <li>Klik <strong>Deploy</strong> → <strong>New deployment</strong> → pilih <em>Who has access:</em> <strong>Anyone</strong>.</li>
                       </ol>
                     </div>
 
                     {/* Code Box Header with Copy Button */}
-                    <div className="flex items-center justify-between bg-slate-900 text-slate-300 px-4 py-2.5 rounded-t-xl font-mono text-xs">
-                      <span className="font-semibold text-slate-200 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                    <div className="flex items-center justify-between bg-slate-900 text-slate-300 px-3 py-2 rounded-t-xl font-mono text-xs">
+                      <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
                         Code.gs
                       </span>
                       <button
                         onClick={handleCopyScript}
-                        className={`px-3 py-1.5 rounded-lg font-sans text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        className={`px-2.5 py-1 rounded-md font-sans text-[11px] font-bold transition-all flex items-center gap-1 ${
                           isCopied
                             ? 'bg-emerald-600 text-white shadow'
                             : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
@@ -1387,12 +1541,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         {isCopied ? (
                           <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Berhasil Disalin!</span>
+                            <Check className="w-3 h-3" />
+                            <span>Tersalin!</span>
                           </>
                         ) : (
                           <>
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-3 h-3" />
                             <span>Salin Seluruh Kode</span>
                           </>
                         )}
@@ -1401,7 +1555,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                     {/* Code Block Container */}
                     <div className="relative">
-                      <pre className="bg-slate-950 text-emerald-400 p-4 rounded-b-xl font-mono text-xs overflow-x-auto max-h-[300px] leading-relaxed select-all">
+                      <pre className="bg-slate-950 text-emerald-400 p-3 rounded-b-xl font-mono text-[10px] leading-relaxed overflow-x-auto max-h-[180px] select-all">
                         <code>{GOOGLE_APPS_SCRIPT_CODE}</code>
                       </pre>
                     </div>
@@ -1410,56 +1564,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 {/* TAB 3: PANDUAN GITHUB & VERCEL */}
                 {activeModalTab === 'vercel' && (
-                  <div className="space-y-4 text-xs text-slate-700">
-                    <div className="bg-slate-900 text-white rounded-xl p-4 space-y-3 shadow-lg">
+                  <div className="space-y-3 text-xs text-slate-700">
+                    <div className="bg-slate-900 text-white rounded-xl p-3 space-y-2 shadow">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-sm text-emerald-400 flex items-center gap-2">
-                          <span>📦</span> Variabel Lingkungan Vercel (Environment Variable)
+                        <h4 className="font-bold text-xs text-emerald-400 flex items-center gap-1.5">
+                          <span>📦</span> Environment Variable
                         </h4>
                         <button
                           onClick={handleCopyUrl}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-semibold transition-colors flex items-center gap-1"
+                          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
                         >
-                          {isUrlCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          {isUrlCopied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
                           <span>{isUrlCopied ? 'URL Disalin' : 'Salin URL'}</span>
                         </button>
                       </div>
 
-                      <div className="bg-slate-950 p-3 rounded-lg font-mono text-xs text-slate-300 space-y-1 border border-slate-800">
-                        <div className="text-slate-400"># KEY:</div>
-                        <div className="text-emerald-400 font-bold">VITE_APPS_SCRIPT_URL</div>
-                        <div className="text-slate-400 mt-2"># VALUE:</div>
-                        <div className="text-sky-300 break-all">{scriptUrl}</div>
+                      <div className="bg-slate-950 p-2.5 rounded-lg font-mono text-[10px] text-slate-300 space-y-0.5 border border-slate-800">
+                        <div className="text-slate-400"># KEY: <span className="text-emerald-400 font-bold">VITE_APPS_SCRIPT_URL</span></div>
+                        <div className="text-slate-400"># VALUE: <span className="text-sky-300 break-all">{scriptUrl || 'URL Anda'}</span></div>
                       </div>
                     </div>
 
-                    <div className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
-                      <h4 className="font-bold text-sm text-slate-900">Langkah-Langkah Connect GitHub ke Vercel:</h4>
-                      <ol className="list-decimal pl-5 space-y-2 font-medium">
-                        <li>Export repositori ini ke <strong>GitHub</strong> (melalui menu Export AI Studio / Git commit).</li>
-                        <li>Buka dashboard <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-blue-600 underline font-bold">Vercel.com</a> lalu klik <strong>Add New Project</strong>.</li>
-                        <li>Pilih repositori GitHub Buku Tamu SMPN 11 Palu Anda.</li>
-                        <li>Pada bagian <strong>Environment Variables</strong>, masukkan:
-                          <ul className="list-disc pl-5 mt-1 space-y-0.5 font-mono text-blue-700">
-                            <li>Key: <code>VITE_APPS_SCRIPT_URL</code></li>
-                            <li>Value: <code>{scriptUrl}</code></li>
-                          </ul>
-                        </li>
-                        <li>Klik <strong>Deploy</strong>. Aplikasi Anda akan langsung aktif di Vercel dan terkoneksi 100% dengan Google Sheets!</li>
+                    <div className="border border-slate-200 rounded-xl p-3 space-y-1.5 bg-slate-50 text-[11px]">
+                      <h4 className="font-bold text-xs text-slate-900">Langkah Deploy Permanen:</h4>
+                      <ol className="list-decimal pl-4 space-y-0.5 font-medium text-slate-600 text-[10px]">
+                        <li>Export repositori ini ke <strong>GitHub</strong>.</li>
+                        <li>Import repositori ke dashboard <strong>Vercel.com</strong>.</li>
+                        <li>Tambahkan environment variable <code>VITE_APPS_SCRIPT_URL</code> dengan value URL di atas.</li>
+                        <li>Klik <strong>Deploy</strong>. Selesai!</li>
                       </ol>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Modal Footer */}
-              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-medium">
-                  File ini juga tersimpan otomatis di repository sebagai <code>/public/Code.gs</code> & <code>.env.example</code>
+              {/* Modal Footer - Compact */}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Tersimpan di <code>/public/Code.gs</code> & <code>.env.example</code>
                 </span>
                 <button
                   onClick={() => setShowScriptModal(false)}
-                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors"
+                  className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition-colors shadow-sm"
                 >
                   Tutup
                 </button>
